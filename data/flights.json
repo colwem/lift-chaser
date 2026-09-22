@@ -1,0 +1,170 @@
+[
+ {
+  "tier": "A",
+  "dest": "ORD / MDW",
+  "carriers": "AA, UA / WN",
+  "timing": "~8-9 pm dep, arr ~10-11 pm CT",
+  "fare": "$181-308 typ",
+  "soaring": "Sky Soaring ~0:50; Chicago Glider Club ~1:00"
+ },
+ {
+  "tier": "A",
+  "dest": "PHL",
+  "carriers": "AA, DL, B6",
+  "timing": "9:29 pm -> 11:09 pm",
+  "fare": "$191-347 typ",
+  "soaring": "Van Sant ~1:15; Blairstown ~1:45"
+ },
+ {
+  "tier": "A",
+  "dest": "DCA",
+  "carriers": "AA, DL, B6",
+  "timing": "earlier than 10:48 pm",
+  "fare": "$185-332 typ",
+  "soaring": "Fairfield PA ~1:30; Skyline"
+ },
+ {
+  "tier": "A",
+  "dest": "BWI",
+  "carriers": "WN, DL",
+  "timing": "10:20 pm -> ~12:00 am",
+  "fare": "$213-364; last-minute +103%",
+  "soaring": "Fairfield PA ~1:20"
+ },
+ {
+  "tier": "A",
+  "dest": "ATL",
+  "carriers": "DL, B6, F9",
+  "timing": "~8 pm dep",
+  "fare": "$196-360 typ",
+  "soaring": "Chilhowee ~2:15; MGSA ~1:00"
+ },
+ {
+  "tier": "A",
+  "dest": "MCO",
+  "carriers": "B6, DL, F9",
+  "timing": "7-8 pm dep",
+  "fare": "$209-395 typ",
+  "soaring": "Seminole-Lake ~0:45"
+ },
+ {
+  "tier": "A",
+  "dest": "SYR / BUF",
+  "carriers": "AA, B6, DL",
+  "timing": "~8:30-9:50 pm",
+  "fare": "$197-338 typ",
+  "soaring": "Harris Hill 1:45-2:30"
+ },
+ {
+  "tier": "A",
+  "dest": "RDU",
+  "carriers": "DL, B6, F9",
+  "timing": "9:45 pm -> 11:56 pm",
+  "fare": "$182-346 typ",
+  "soaring": "NCSA ~0:45"
+ },
+ {
+  "tier": "B",
+  "dest": "DEN",
+  "carriers": "UA, WN, B6, DL",
+  "timing": "9:06 pm -> 11:48 pm MT",
+  "fare": "$278-468; avg $365",
+  "soaring": "Boulder ~0:45"
+ },
+ {
+  "tier": "B",
+  "dest": "CLT",
+  "carriers": "AA, DL",
+  "timing": "8:10 pm -> 10:44 pm",
+  "fare": "$296-429",
+  "soaring": "Bermuda High ~1:15"
+ },
+ {
+  "tier": "B",
+  "dest": "IAD",
+  "carriers": "UA",
+  "timing": "7:41 pm (tight)",
+  "fare": "$226-377",
+  "soaring": "Skyline, Eastern Soaring"
+ },
+ {
+  "tier": "B",
+  "dest": "PIT",
+  "carriers": "B6, DL",
+  "timing": "9:59 pm -> 11:55 pm",
+  "fare": "$233-421",
+  "soaring": "Pittsburgh Soaring ~1:00"
+ },
+ {
+  "tier": "B",
+  "dest": "DTW",
+  "carriers": "DL, B6",
+  "timing": "9:40 pm -> 11:55 pm",
+  "fare": "$237-416",
+  "soaring": "Sandhill ~1:00"
+ },
+ {
+  "tier": "B",
+  "dest": "AUS",
+  "carriers": "DL, B6, WN",
+  "timing": "7:49 pm -> 11:27 pm CT",
+  "fare": "$253-470",
+  "soaring": "Fault Line Flyers ~1:15"
+ },
+ {
+  "tier": "B",
+  "dest": "TPA",
+  "carriers": "B6, DL",
+  "timing": "earlier than 9:35 pm",
+  "fare": "$230-441",
+  "soaring": "Tampa Bay ~0:45; Seminole ~1:15"
+ },
+ {
+  "tier": "B",
+  "dest": "BNA",
+  "carriers": "WN, B6, DL",
+  "timing": "9:29 pm -> 11:23 pm CT",
+  "fare": "$242-432",
+  "soaring": "Eagleville ~0:45; Chilhowee ~3:00"
+ },
+ {
+  "tier": "C",
+  "dest": "PHX",
+  "carriers": "AA, DL, B6",
+  "timing": "8:29 pm -> 11:21 pm MST",
+  "fare": "$307-517; avg $398",
+  "soaring": "Arizona Soaring ~0:45"
+ },
+ {
+  "tier": "C",
+  "dest": "LAS",
+  "carriers": "B6, DL",
+  "timing": "8:40 pm -> 11:37 pm PT",
+  "fare": "$310-542",
+  "soaring": "LVVSA ~0:30"
+ },
+ {
+  "tier": "C",
+  "dest": "DFW",
+  "carriers": "AA, DL",
+  "timing": "7:50 pm -> 11:18 pm CT",
+  "fare": "$314-540",
+  "soaring": "TSA ~0:50"
+ },
+ {
+  "tier": "C",
+  "dest": "SLC",
+  "carriers": "DL, B6",
+  "timing": "7:30 pm -> 10:55 pm MT",
+  "fare": "$410-665",
+  "soaring": "Heber ~0:55"
+ },
+ {
+  "tier": "C",
+  "dest": "RNO",
+  "carriers": "none nonstop",
+  "timing": "n/a",
+  "fare": "n/a",
+  "soaring": "Minden: not reachable Friday night"
+ }
+]

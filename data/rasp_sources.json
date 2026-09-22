@@ -1,0 +1,20 @@
+{
+ "NewEngland": {
+  "base": "https://www.soargbsc.net/rasp/",
+  "alt_base": "http://soargbsc.com/rasp/",
+  "operator": "Greater Boston Soaring Club (Steve Paavola)",
+  "sites": [
+   "GBSC",
+   "SUGAR",
+   "MOHAWK",
+   "POSTMILLS",
+   "NESA",
+   "FRANCONIA",
+   "CSA",
+   "GORHAM",
+   "SANFORD",
+   "SPIRIT",
+   "ASA"
+  ]
+ }
+}

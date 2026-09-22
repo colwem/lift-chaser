@@ -1,0 +1,59 @@
+{
+ "_doc": "Working wind direction (deg true, FROM) and half-width (deg) for ridge sites. Heuristic; refine per ridge.",
+ "SUGAR": [
+  285,
+  45
+ ],
+ "MOHAWK": [
+  270,
+  40
+ ],
+ "FRANCONIA": [
+  270,
+  40
+ ],
+ "WURTS": [
+  315,
+  35
+ ],
+ "ACA": [
+  315,
+  35
+ ],
+ "JRS": [
+  315,
+  35
+ ],
+ "HHSC": [
+  300,
+  40
+ ],
+ "CHIL": [
+  300,
+  40
+ ],
+ "BRSS": [
+  300,
+  40
+ ],
+ "SKYLINE": [
+  290,
+  40
+ ],
+ "MASA": [
+  300,
+  40
+ ],
+ "ESC": [
+  290,
+  40
+ ],
+ "GORHAM": [
+  300,
+  40
+ ],
+ "SVS": [
+  300,
+  40
+ ]
+}

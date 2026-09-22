@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chase-Lift Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --ink:#16252f; --muted:#5b6b75; --line:#d5dde2; --panel:#f7f9fa; --bg:#ffffff;
+  --accent:#0f6e8c; --accent-2:#e0f0f5;
+  --rent:#1f9d55; --guest:#2f6fc0; --join:#9a7b3c; --unk:#d69e2e; --closed:#8a8f93;
+  --font:"Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--font);color:var(--ink);background:var(--bg);font-size:15px}
+#app{display:grid;grid-template-columns:360px 1fr;height:100%}
+#side{border-right:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:14px 16px 24px}
+#mapwrap{position:relative;height:100%}
+#map{height:100%}
+#detail{position:absolute;top:0;right:0;bottom:0;width:min(640px,100%);background:var(--bg);border-left:1px solid var(--line);box-shadow:-6px 0 18px rgba(22,37,47,.12);overflow-y:auto;padding:16px 18px 28px;z-index:1000}
+#detail h2{margin:0 0 2px;font-size:22px;padding-right:70px}
+#detail h3{margin:16px 0 6px;font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+#detail .meta{color:var(--muted);font-size:13px;margin-bottom:6px}
+#detail .close{position:absolute;top:14px;right:16px}
+#detail dl{display:grid;grid-template-columns:100px 1fr;gap:4px 10px;margin:10px 0;font-size:14px}
+#detail dt{font-weight:600;color:var(--muted)} #detail dd{margin:0}
+.tw{overflow-x:auto}
+table.spec{border-collapse:collapse;font-size:12.5px;min-width:760px}
+table.spec th,table.spec td{border-bottom:1px solid var(--line);padding:3px 5px;text-align:left;vertical-align:top}
+table.spec td:first-child{min-width:170px}
+table.spec th{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em;white-space:nowrap}
+.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+#glist{list-style:none;margin:6px 0 0;padding:0;max-height:320px;overflow-y:auto;border-top:1px solid var(--line)}
+#glist li{display:grid;grid-template-columns:38px 1fr;gap:6px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px}
+#glist li:hover{background:var(--accent-2)}
+#glist .ld{font-weight:600;color:var(--accent);text-align:center}
+input[type=search]{font-family:inherit;font-size:14px;padding:5px 6px;border:1px solid var(--line);border-radius:4px;width:100%}
+h1{font-size:22px;margin:0 0 2px;letter-spacing:.2px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:12px}
+fieldset{border:0;border-top:1px solid var(--line);margin:0;padding:10px 0 12px}
+legend{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:0 6px 0 0}
+label{display:flex;align-items:center;gap:6px;font-size:14px;margin:3px 0;cursor:pointer}
+select,input[type=range],button{font-family:inherit;font-size:14px}
+select{width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink)}
+.row{display:flex;gap:8px;align-items:center}
+.row > *{flex:1}
+input[type=range]{width:100%}
+button{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:4px;padding:6px 10px;cursor:pointer}
+button.ghost{background:#fff;color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hour{font-family:var(--mono);font-size:13px;min-width:70px;text-align:right;flex:0 0 auto}
+.dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:0 0 auto;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+#status{font-size:12.5px;color:var(--muted);min-height:18px;margin-top:6px}
+#legend{margin-top:6px}
+.ramp{height:10px;border-radius:2px;border:1px solid var(--line)}
+.ramp-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted)}
+#rank{list-style:none;margin:0;padding:0}
+#rank li{display:grid;grid-template-columns:44px 1fr auto;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}
+#rank li:hover{background:var(--accent-2)}
+.score{font-family:var(--mono);font-weight:600;text-align:center;border-radius:3px;padding:1px 0;color:#fff}
+.small{font-size:12px;color:var(--muted)}
+.leaflet-popup-content{font-family:var(--font);font-size:14px;margin:12px 14px;min-width:280px}
+.pop h3{margin:0 0 2px;font-size:17px}
+.pop .meta{color:var(--muted);font-size:13px;margin-bottom:6px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:10px;color:#fff;margin-right:4px}
+.pop table{border-collapse:collapse;width:100%;font-size:12.5px;margin:6px 0}
+.pop td,.pop th{border-bottom:1px solid var(--line);padding:2px 4px;text-align:left;vertical-align:top}
+.pop th{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em}
+.pop .mono{font-family:var(--mono);font-size:11.5px}
+.pop .fc{background:var(--accent-2);border-radius:4px;padding:6px 8px;margin:6px 0;font-size:13px}
+.pop .links a{margin-right:8px;font-size:13px}
+.pop .proc{font-size:12.5px;max-height:90px;overflow:auto;color:#2c3a42}
+.wind-arrow{color:#16252f;font-size:15px;line-height:15px;text-shadow:0 0 3px #fff,0 0 3px #fff}
+@media (max-width:760px){#app{grid-template-columns:1fr;grid-template-rows:48% 52%}#side{order:2;border-right:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<div id="app">
+<aside id="side">
+  <h1>Chase-Lift Map</h1>
+  <div class="sub">Glider sites within a Friday-night van drive or cheap flight from Boston, over live weather and a GFS soaring forecast. Data compiled 2026-09-22. Click a site for its full fleet with glide ratios and speeds.</div>
+
+  <fieldset>
+    <legend>Forecast field (GFS via Open-Meteo)</legend>
+    <select id="variable" aria-label="Forecast variable">
+      <option value="score">Soaring index (heuristic, 0 to 10)</option>
+      <option value="blh">Boundary layer height (thermal depth), ft AGL</option>
+      <option value="cbase">Estimated cumulus base, ft AGL</option>
+      <option value="w850">850 hPa wind (~5,000 ft MSL), kt + arrows</option>
+      <option value="gust">10 m wind gusts, kt</option>
+      <option value="cape">CAPE (overdevelopment risk), J/kg</option>
+      <option value="li">Lifted index (lower = more unstable)</option>
+      <option value="low">Low cloud cover, %</option>
+      <option value="pop">Precipitation probability, %</option>
+      <option value="none">(no forecast field)</option>
+    </select>
+    <div class="row" style="margin-top:8px">
+      <select id="day" aria-label="Day"></select>
+      <select id="region" aria-label="Region">
+        <option value="ne">Northeast (0.5 deg)</option>
+        <option value="east">Eastern US (1 deg)</option>
+        <option value="conus">Whole US (1.5 deg)</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="range" id="hour" min="8" max="19" step="1" value="14" aria-label="Hour">
+      <span class="hour" id="hourLabel">14:00 ET</span>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <label><input type="range" id="opacity" min="0.1" max="0.9" step="0.05" value="0.5" aria-label="Field opacity"> opacity</label>
+    </div>
+    <div id="legend"></div>
+    <div id="status"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Live layers</legend>
+    <label><input type="checkbox" id="radar"> NEXRAD radar (IEM)</label>
+    <label><input type="checkbox" id="vis"> GOES-East visible satellite</label>
+    <label><input type="checkbox" id="ir"> GOES-East infrared satellite</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Glider sites</legend>
+    <div id="rentalFilters"></div>
+    <label style="margin-top:6px"><input type="checkbox" id="vanOnly"> Van range only (4 h or less)</label>
+    <label><input type="checkbox" id="tallOnly"> Fleet has a tall-pilot-friendly type</label>
+    <label><input type="checkbox" id="showRings" checked> Show drive-time rings from Newton</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Glider list (all visible sites)</legend>
+    <div class="row"><input id="gq" type="search" placeholder="Search type or site" aria-label="Search gliders">
+    <select id="gwho" aria-label="Who can fly"><option value="all">Any access</option><option value="visitor">Visitor or guest can fly</option></select></div>
+    <div class="row" style="margin-top:6px"><select id="gsort" aria-label="Sort"><option value="ld">Sort by glide ratio</option><option value="sink">Sort by min sink</option><option value="name">Sort by type</option></select><span class="small" id="gcount" style="flex:0 0 auto"></span></div>
+    <ol id="glist"></ol>
+  </fieldset>
+
+  <fieldset>
+    <legend>Best sites for the selected day</legend>
+    <div class="small" style="margin-bottom:4px">Score from each site's own forecast, 11:00 to 17:00 local time. Click a row to zoom.</div>
+    <ol id="rank"></ol>
+  </fieldset>
+
+  <fieldset>
+    <legend>How the index works</legend>
+    <div class="small">Thermal part: boundary layer depth (1,500 ft = 0, 6,500 ft = full), cut by low cloud, rain chance and high CAPE. Ridge part (ridge sites only): 850 hPa wind 12 to 35 kt within 40 degrees of the ridge's working direction. Index = the better of the two. It is a rough sort. Always check SkySight, XC Skies or RASP and the NWS area forecast discussion before driving.</div>
+  </fieldset>
+</aside>
+<div id="mapwrap"><div id="map"></div><aside id="detail" hidden></aside></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const OPS = __OPS__;
+const FLEET = __FLEET__;
+const TYPES = __TYPES__;
+const RASP = __RASP__;
+const RENTAL = {RENT:["Rents to visitors","--rent"],GUEST:["Guest / short-term membership","--guest"],JOIN:["Membership required","--join"],UNK:["Unknown, call","--unk"],CLOSED:["Closed / inactive","--closed"]};
+const ACCESS = {VAN:"Van, 4 h or less",VANEDGE:"Van, about 4 h",FLY:"Fly Friday night",FAR:"Out of range"};
+// working wind direction (deg, from) and half-width for ridge sites
+const RIDGE = {SUGAR:[285,45],MOHAWK:[270,40],FRANCONIA:[270,40],WURTS:[315,35],ACA:[315,35],JRS:[315,35],HHSC:[300,40],CHIL:[300,40],BRSS:[300,40],SKYLINE:[290,40],MASA:[300,40],ESC:[290,40],GORHAM:[300,40],SVS:[300,40]};
+const TALL = /Roomy|Good|roomy/;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+const fleetBy = {}; FLEET.forEach(f => (fleetBy[f[0]] ||= []).push(f));
+// fleet rows: [opId, model, reg, seats, rate, who, tallNote, typeKey]
+OPS.forEach(o => o.tallOK = (fleetBy[o.id]||[]).some(f => TYPES[f[7]] && TALL.test(TYPES[f[7]].cockpit) && !/Does not fit|Dual only/.test(f[6])));
+const kt = k => Math.round(k/1.852), fpm = m => Math.round(m*196.85);
+function fleetSummary(id){
+  const c={}; (fleetBy[id]||[]).forEach(f=>{const t=TYPES[f[7]]; const n=(f[1].match(/\(x(\d)\)/)||[])[1]||1; const k=t?t.name.replace(/^(Schweizer|Schleicher|Schempp-Hirth|Grob|LET|PZL|Rolladen-Schneider|Glaser-Dirks|Pilatus) /,''):f[1]; c[k]=(c[k]||0)+ +n;});
+  return Object.entries(c).map(([k,n])=>`${n>1?n+'x ':''}${k}`).join(', ');
+}
+
+// ---------- map ----------
+const map = L.map('map', {zoomControl:true}).setView([42.3, -73.5], 6);
+const base = {
+  "Light gray": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,maxNativeZoom:16,attribution:'Esri, HERE, Garmin, USGS'}),
+  "USGS topo": L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,maxNativeZoom:16,attribution:'USGS The National Map'}),
+  "Esri topo": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri, USGS, NOAA'}),
+  "Shaded relief": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,maxNativeZoom:13,attribution:'Esri'}),
+  "Satellite imagery": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri, Maxar'})
+};
+base["Light gray"].addTo(map);
+L.control.layers(base, null, {position:'topright'}).addTo(map);
+
+const radar = L.tileLayer('https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png?'+Date.now(),{opacity:.7,attribution:'NEXRAD via IEM'});
+const vis = L.tileLayer.wms('https://mesonet.agron.iastate.edu/cgi-bin/wms/goes_east.cgi?',{layers:'conus_ch02',format:'image/png',transparent:true,opacity:.65,attribution:'GOES via IEM'});
+const ir = L.tileLayer.wms('https://mesonet.agron.iastate.edu/cgi-bin/wms/goes_east.cgi?',{layers:'conus_ch13',format:'image/png',transparent:true,opacity:.6,attribution:'GOES via IEM'});
+[['radar',radar],['vis',vis],['ir',ir]].forEach(([id,l])=>document.getElementById(id).addEventListener('change',e=>e.target.checked?l.addTo(map):map.removeLayer(l)));
+
+// drive rings (straight-line approximations of drive time from Newton)
+const NEWTON=[42.337,-71.209];
+const rings = L.layerGroup([
+  L.circle(NEWTON,{radius:130*1609,color:'#0f6e8c',weight:1,dashArray:'4 4',fill:false}).bindTooltip('~2.5 h drive'),
+  L.circle(NEWTON,{radius:195*1609,color:'#0f6e8c',weight:1.5,dashArray:'6 4',fill:false}).bindTooltip('~4 h drive (Friday), straight-line approx'),
+  L.circleMarker(NEWTON,{radius:5,color:'#fff',weight:2,fillColor:'#16252f',fillOpacity:1}).bindTooltip('Newton')
+]).addTo(map);
+document.getElementById('showRings').addEventListener('change',e=>e.target.checked?rings.addTo(map):map.removeLayer(rings));
+
+// ---------- site markers ----------
+const siteLayer = L.layerGroup().addTo(map);
+const markers = {};
+const rf = document.getElementById('rentalFilters');
+Object.entries(RENTAL).forEach(([k,[lab,v]])=>{
+  rf.insertAdjacentHTML('beforeend',`<label><input type="checkbox" data-rent="${k}" ${k==='CLOSED'?'':'checked'}><span class="dot" style="background:var(${v})"></span>${lab}</label>`);
+});
+function visibleOps(){
+  const on = new Set([...rf.querySelectorAll('input:checked')].map(i=>i.dataset.rent));
+  const van = document.getElementById('vanOnly').checked, tall = document.getElementById('tallOnly').checked;
+  return OPS.filter(o => on.has(o.rental) && (!van || o.access==='VAN' || o.access==='VANEDGE') && (!tall || o.tallOK));
+}
+var drawSites = function(){
+  siteLayer.clearLayers();
+  visibleOps().forEach(o=>{
+    const m = L.circleMarker([o.lat,o.lon],{radius:o.kind.startsWith('Commercial')?9:7,color:'#fff',weight:2,fillColor:css(RENTAL[o.rental][1]),fillOpacity:.95});
+    m.bindTooltip(`<b>${esc(o.name)}</b><br>${esc(fleetSummary(o.id)||'No fleet listed')}`);
+    m.on('click',()=>showDetail(o.id));
+    m.bindPopup(()=>popup(o),{maxWidth:380});
+    m.addTo(siteLayer); markers[o.id]=m;
+  });
+  renderRank();
+};
+['vanOnly','tallOnly'].forEach(id=>document.getElementById(id).addEventListener('change',drawSites));
+rf.addEventListener('change',drawSites);
+
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function popup(o){
+  const fl = (fleetBy[o.id]||[]).map(f=>`<tr><td>${esc(f[1])}</td><td class="mono">${esc(f[2]||'')}</td><td>${esc(f[4])}</td><td>${esc(f[5])}</td></tr>`).join('');
+  const fc = siteFc[o.id]?.[dayKey()];
+  const fcHtml = fc ? `<div class="fc"><b>${dayLabel()}</b>, 11:00 to 17:00 local: index <b>${fc.score.toFixed(1)}</b> (thermal ${fc.th.toFixed(1)}${RIDGE[o.id]?`, ridge ${fc.ridge.toFixed(1)}`:''})<br>
+    BL max ${fmt(fc.blh)} ft AGL, cu base ~${fmt(fc.cb)} ft AGL, 850 hPa ${Math.round(fc.w850)} kt from ${Math.round(fc.d850)}&deg;, gusts ${Math.round(fc.gust)} kt, rain ${Math.round(fc.pop)}%, CAPE ${Math.round(fc.cape)}</div>` : `<div class="fc small">Site forecast loading or unavailable.</div>`;
+  const lk = `https://www.windy.com/?${o.lat},${o.lon},9`;
+  return `<div class="pop"><h3>${esc(o.name)}</h3>
+  <div class="meta">${esc(o.kind)} &middot; ${esc(o.airport)} &middot; ${esc(o.city)}</div>
+  <span class="pill" style="background:var(${RENTAL[o.rental][1]})">${RENTAL[o.rental][0]}</span><span class="pill" style="background:#16252f">${ACCESS[o.access]}</span>
+  <div style="margin-top:6px"><b>Soaring:</b> ${esc(o.lift)}<br><b>Days:</b> ${esc(o.season)}<br><b>Getting there:</b> ${esc(o.travel)}</div>
+  ${fcHtml}
+  <div class="proc"><b>Renting:</b> ${esc(o.procedure)}<br><b>Costs:</b> ${esc(o.costs)}<br><b>Tall pilot:</b> ${esc(o.tall)}</div>
+  <div style="margin:6px 0"><b>Fleet:</b> ${esc(fleetSummary(o.id)||'none listed')}<br><a href="#" onclick="showDetail('${o.id}');return false">Full fleet with glide ratios and speeds &rarr;</a></div>
+  <div><b>Phone:</b> ${esc(o.phone)} ${o.email?`&middot; ${esc(o.email)}`:''}</div>
+  <div class="links" style="margin-top:4px"><a href="${esc(o.web)}" target="_blank" rel="noopener">Website</a><a href="${lk}" target="_blank" rel="noopener">Windy</a><a href="https://forecast.weather.gov/MapClick.php?lat=${o.lat}&lon=${o.lon}" target="_blank" rel="noopener">NWS point</a>${RASP[o.id]?`<a href="${RASP[o.id]}" target="_blank" rel="noopener">RASP</a>`:''}<a href="https://skysight.io" target="_blank" rel="noopener">SkySight</a><a href="https://xcskies.com/map" target="_blank" rel="noopener">XC Skies</a></div>
+  </div>`;
+}
+const fmt = n => n==null||isNaN(n)?'n/a':(Math.round(n/100)*100).toLocaleString();
+
+// ---------- days ----------
+const daySel = document.getElementById('day');
+const today = new Date(); today.setHours(0,0,0,0);
+let defIdx = 0;
+for(let i=0;i<7;i++){
+  const d = new Date(today); d.setDate(d.getDate()+i);
+  const key = d.toLocaleDateString('en-CA');
+  const lab = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  daySel.insertAdjacentHTML('beforeend',`<option value="${key}">${lab}</option>`);
+  if(!defIdx && d.getDay()===6) defIdx=i;
+}
+daySel.selectedIndex = defIdx;
+const dayKey = () => daySel.value;
+const dayLabel = () => daySel.options[daySel.selectedIndex].text;
+
+// ---------- forecast grid ----------
+const VARS = 'boundary_layer_height,temperature_2m,dew_point_2m,cape,lifted_index,cloud_cover_low,precipitation_probability,wind_speed_850hPa,wind_direction_850hPa,wind_gusts_10m';
+const REGIONS = {ne:{la:[39.5,47],lo:[-80,-67],s:.5}, east:{la:[29,47],lo:[-90,-67],s:1}, conus:{la:[25,49],lo:[-124.5,-67],s:1.5}};
+const gridCache = {};
+const fieldLayer = L.layerGroup().addTo(map);
+const status = m => document.getElementById('status').textContent = m;
+
+async function fetchPoints(pts, tz){
+  const out=[]; const n=50;
+  for(let i=0;i<pts.length;i+=n){
+    const ch=pts.slice(i,i+n);
+    const url=`https://api.open-meteo.com/v1/gfs?latitude=${ch.map(p=>p[0].toFixed(2)).join(',')}&longitude=${ch.map(p=>p[1].toFixed(2)).join(',')}&hourly=${VARS}&wind_speed_unit=kn&forecast_days=7&timezone=${encodeURIComponent(tz)}`;
+    const r = await fetch(url); if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status);
+    const j = await r.json(); (Array.isArray(j)?j:[j]).forEach(x=>out.push(x));
+    status(`Loading forecast ${Math.min(i+n,pts.length)} / ${pts.length} points`);
+  }
+  return out;
+}
+async function loadGrid(reg){
+  if(gridCache[reg]) return gridCache[reg];
+  const R=REGIONS[reg], pts=[];
+  for(let la=R.la[0];la<=R.la[1]+1e-6;la+=R.s) for(let lo=R.lo[0];lo<=R.lo[1]+1e-6;lo+=R.s) pts.push([la,lo]);
+  const res = await fetchPoints(pts,'America/New_York');
+  return gridCache[reg] = {R, pts, res};
+}
+function val(h, i, v){
+  const g=k=>h[k][i];
+  switch(v){
+    case 'blh': return g('boundary_layer_height')*3.281;
+    case 'cbase': return Math.max(0,(g('temperature_2m')-g('dew_point_2m'))*400);
+    case 'w850': return g('wind_speed_850hPa');
+    case 'gust': return g('wind_gusts_10m');
+    case 'cape': return g('cape');
+    case 'li': return g('lifted_index');
+    case 'low': return g('cloud_cover_low');
+    case 'pop': return g('precipitation_probability');
+    case 'score': return thermalScore(g('boundary_layer_height')*3.281,g('cloud_cover_low'),g('precipitation_probability'),g('cape'));
+  }
+}
+function thermalScore(blhFt, low, pop, cape){
+  let s = Math.max(0,Math.min(1,(blhFt-1500)/5000))*10;
+  s *= 1 - Math.min(1,Math.max(0,(low-30)/60))*0.7;
+  s *= 1 - Math.min(1,Math.max(0,(pop-20)/60))*0.8;
+  if(cape>1500) s *= 0.7;
+  return s;
+}
+const RANKSC={min:0,max:10,c:['#9aa7ae','#6fae8c','#2f9e6b','#0b6b45']};
+const SCALES = {
+  score:{min:0,max:10,c:['#f1f5f7','#c9e7d6','#7cc8a0','#2f9e6b','#0b6b45'],u:''},
+  blh:{min:0,max:8000,c:['#f1f5f7','#cfe6f2','#79b8dd','#2f7fc0','#1b3f8a'],u:' ft'},
+  cbase:{min:0,max:9000,c:['#f7efe3','#e8d3a7','#a9c98f','#4fa37a','#1f6b5f'],u:' ft'},
+  w850:{min:0,max:45,c:['#f1f5f7','#cfe0ea','#8bb4d0','#e0a458','#c0392b'],u:' kt'},
+  gust:{min:0,max:40,c:['#f1f5f7','#cfe0ea','#8bb4d0','#e0a458','#c0392b'],u:' kt'},
+  cape:{min:0,max:2500,c:['#f1f5f7','#f6e3a4','#f0b25a','#e0643c','#9b1d2a'],u:''},
+  li:{min:-6,max:8,c:['#9b1d2a','#e0643c','#f6e3a4','#cfe0ea','#8bb4d0'],u:''},
+  low:{min:0,max:100,c:['#ffffff','#e4e8eb','#b9c2c8','#7f8b93','#4b555c'],u:' %'},
+  pop:{min:0,max:100,c:['#ffffff','#d6ecd2','#8ccf86','#3e9e5f','#1d6340'],u:' %'},
+};
+function hex2rgb(h){h=h.replace('#','');return [0,2,4].map(i=>parseInt(h.substr(i,2),16));}
+function color(v, sc){
+  if(v==null||isNaN(v)) return null;
+  let t=(v-sc.min)/(sc.max-sc.min); t=Math.max(0,Math.min(1,t));
+  const n=sc.c.length-1, i=Math.min(n-1,Math.floor(t*n)), f=t*n-i;
+  const a=hex2rgb(sc.c[i]), b=hex2rgb(sc.c[i+1]);
+  return `rgb(${a.map((x,k)=>Math.round(x+(b[k]-x)*f)).join(',')})`;
+}
+function legend(v){
+  const el=document.getElementById('legend');
+  if(v==='none'){el.innerHTML='';return;}
+  const sc=SCALES[v];
+  el.innerHTML=`<div class="ramp" style="background:linear-gradient(90deg,${sc.c.join(',')})"></div><div class="ramp-labels"><span>${sc.min}${sc.u}</span><span>${(sc.min+sc.max)/2}${sc.u}</span><span>${sc.max}${sc.u}</span></div>`;
+}
+async function drawField(){
+  const v=document.getElementById('variable').value, reg=document.getElementById('region').value;
+  const hour=+document.getElementById('hour').value, op=+document.getElementById('opacity').value;
+  document.getElementById('hourLabel').textContent=`${String(hour).padStart(2,'0')}:00 ET`;
+  legend(v); fieldLayer.clearLayers();
+  if(v==='none'){status('');return;}
+  let g; try{ g=await loadGrid(reg);}catch(e){status('Forecast unavailable: '+e.message+'. Check your connection; Open-Meteo is free and needs no key.');return;}
+  const t = `${dayKey()}T${String(hour).padStart(2,'0')}:00`;
+  const sc=SCALES[v], half=g.R.s/2;
+  g.res.forEach((r,k)=>{
+    const i=r.hourly.time.indexOf(t); if(i<0) return;
+    const x=val(r.hourly,i,v), c=color(x,sc); if(!c) return;
+    const [la,lo]=g.pts[k];
+    L.rectangle([[la-half,lo-half],[la+half,lo+half]],{stroke:false,fillColor:c,fillOpacity:op,interactive:true})
+      .bindTooltip(`${Math.round(x*10)/10}${sc.u}`,{sticky:true}).addTo(fieldLayer);
+    if(v==='w850'||v==='gust'){
+      const d=r.hourly.wind_direction_850hPa[i];
+      L.marker([la,lo],{interactive:false,icon:L.divIcon({className:'wind-arrow',html:`<div style="transform:rotate(${d+180}deg)">&#x2191;</div>`,iconSize:[15,15]})}).addTo(fieldLayer);
+    }
+  });
+  status(`${dayLabel()} ${String(hour).padStart(2,'0')}:00 ET, GFS. ${g.pts.length} grid points.`);
+}
+['variable','region','day'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{drawField();if(id==='day')renderRank();}));
+document.getElementById('hour').addEventListener('input',drawField);
+document.getElementById('opacity').addEventListener('input',()=>{const op=+document.getElementById('opacity').value;fieldLayer.eachLayer(l=>l.setStyle&&l.setStyle({fillOpacity:op}));});
+
+// ---------- per-site daily forecast ----------
+const siteFc = {};
+async function loadSites(){
+  const live = OPS.filter(o=>o.rental!=='CLOSED');
+  let res; try{ res = await fetchPoints(live.map(o=>[o.lat,o.lon]),'auto'); }catch(e){ return; }
+  res.forEach((r,k)=>{
+    const o=live[k], h=r.hourly, byDay={};
+    h.time.forEach((t,i)=>{
+      const hr=+t.slice(11,13); if(hr<11||hr>17) return;
+      const d=t.slice(0,10); (byDay[d] ||= []).push(i);
+    });
+    siteFc[o.id]={};
+    Object.entries(byDay).forEach(([d,ix])=>{
+      const mx=k=>Math.max(...ix.map(i=>h[k][i]??0)), mean=k=>ix.reduce((a,i)=>a+(h[k][i]??0),0)/ix.length;
+      const blh=mx('boundary_layer_height')*3.281, cb=Math.max(...ix.map(i=>(h.temperature_2m[i]-h.dew_point_2m[i])*400));
+      const w=mean('wind_speed_850hPa'), dd=circMean(ix.map(i=>h.wind_direction_850hPa[i]));
+      const th=thermalScore(blh,mean('cloud_cover_low'),mx('precipitation_probability'),mx('cape'));
+      let ridge=0; const rd=RIDGE[o.id];
+      if(rd){ const off=Math.abs(((dd-rd[0]+540)%360)-180); if(off<=rd[1] && w>=12 && w<=35) ridge = 10*(1-off/rd[1]*0.4)*Math.min(1,(w-8)/12) * (1-Math.min(1,Math.max(0,(mx('precipitation_probability')-30)/50))*0.8); }
+      siteFc[o.id][d]={blh,cb,w850:w,d850:dd,gust:mx('wind_gusts_10m'),pop:mx('precipitation_probability'),cape:mx('cape'),th,ridge,score:Math.max(th,ridge)};
+    });
+  });
+  renderRank();
+}
+function circMean(a){const s=a.reduce((x,d)=>x+Math.sin(d*Math.PI/180),0),c=a.reduce((x,d)=>x+Math.cos(d*Math.PI/180),0);return (Math.atan2(s,c)*180/Math.PI+360)%360;}
+function renderRank(){
+  const ol=document.getElementById('rank'); const d=dayKey();
+  const rows = visibleOps().filter(o=>siteFc[o.id]?.[d]).map(o=>({o,f:siteFc[o.id][d]})).sort((a,b)=>b.f.score-a.f.score).slice(0,15);
+  if(!rows.length){ol.innerHTML='<li class="small" style="display:block">Loading site forecasts...</li>';return;}
+  ol.innerHTML = rows.map(({o,f})=>`<li data-id="${o.id}"><span class="score" style="background:${color(f.score,RANKSC)}">${f.score.toFixed(1)}</span><span>${esc(o.name)}<br><span class="small">${f.ridge>f.th?'ridge ':''}${ACCESS[o.access]} &middot; ${RENTAL[o.rental][0]}</span></span><span class="dot" style="background:var(${RENTAL[o.rental][1]})"></span></li>`).join('');
+}
+document.getElementById('rank').addEventListener('click',e=>{const li=e.target.closest('li[data-id]'); if(!li) return; const o=OPS.find(x=>x.id===li.dataset.id); map.setView([o.lat,o.lon],9); showDetail(o.id);});
+
+
+// ---------- detail drawer ----------
+function specCells(t){ if(!t) return '<td colspan="6" class="small">type data missing</td>';
+  const a=t.approx?'<sup title="approximate, verify in flight manual">*</sup>':'';
+  return `<td class="num">${t.ld}${a}</td><td class="num">${kt(t.v_ld)}</td><td class="num">${fpm(t.sink)}</td><td class="num">${kt(t.vne)}</td><td class="num">${t.span}</td><td>${esc(t.cockpit)}</td>`; }
+function showDetail(id){
+  const o=OPS.find(x=>x.id===id), d=document.getElementById('detail');
+  const rows=(fleetBy[id]||[]).map(f=>{const t=TYPES[f[7]];return `<tr><td><b>${esc(f[1])}</b><br><span class="small">${esc(t?t.cls:'')}</span></td><td class="mono">${esc(f[2]||'not found')}</td><td class="num">${f[3]}</td>${specCells(t)}<td>${esc(f[4])}</td><td>${esc(f[5])}</td><td>${esc(f[6])}</td></tr>`}).join('');
+  d.innerHTML=`<button class="ghost close" aria-label="Close details" onclick="document.getElementById('detail').hidden=true">Close</button>
+   <h2>${esc(o.name)}</h2><div class="meta">${esc(o.kind)} &middot; ${esc(o.airport)} &middot; ${esc(o.city)}</div>
+   <span class="pill" style="background:var(${RENTAL[o.rental][1]})">${RENTAL[o.rental][0]}</span><span class="pill" style="background:#16252f">${ACCESS[o.access]}</span>
+   <dl><dt>Soaring</dt><dd>${esc(o.lift)}</dd><dt>Days</dt><dd>${esc(o.season)}</dd><dt>Getting there</dt><dd>${esc(o.travel)}</dd>
+   <dt>Renting</dt><dd>${esc(o.procedure)}</dd><dt>Costs</dt><dd>${esc(o.costs)}</dd><dt>Tall pilot</dt><dd>${esc(o.tall)}</dd>
+   <dt>Contact</dt><dd>${esc(o.phone)}${o.email?' &middot; '+esc(o.email):''}${o.contacts?'<br>'+esc(o.contacts):''}<br><a href="${esc(o.web)}" target="_blank" rel="noopener">${esc(o.web)}</a></dd></dl>
+   <h3>Fleet (${(fleetBy[id]||[]).length} rows)</h3>
+   ${rows?`<div class="tw"><table class="spec"><tr><th>Glider</th><th>Reg.</th><th>Seats</th><th title="maximum glide ratio">L/D</th><th title="best glide speed, knots">V<sub>L/D</sub> kt</th><th title="minimum sink, feet per minute">Min sink fpm</th><th title="never-exceed speed, knots">V<sub>NE</sub> kt</th><th>Span m</th><th>Cockpit</th><th>Rate</th><th>Who can fly</th><th>Operator note</th></tr>${rows}</table></div>
+   <p class="small">L/D = maximum glide ratio. V<sub>L/D</sub> = speed for best glide. Min sink = lowest sink rate in still air. V<sub>NE</sub> = never-exceed speed. Nominal type figures; * = approximate, verify in the flight manual.</p>`:'<p class="small">No fleet found for this operator.</p>'}
+   <p class="small">Sources: ${esc(o.sources)}</p>`;
+  d.hidden=false; d.scrollTop=0;
+}
+window.showDetail=showDetail;
+
+// ---------- global glider list ----------
+function renderGliders(){
+  const q=document.getElementById('gq').value.toLowerCase(), who=document.getElementById('gwho').value, sort=document.getElementById('gsort').value;
+  const on=new Set(visibleOps().map(o=>o.id));
+  let rows=FLEET.filter(f=>on.has(f[0])).map(f=>({f,t:TYPES[f[7]],o:OPS.find(o=>o.id===f[0])}));
+  if(who==='visitor') rows=rows.filter(r=>/^Yes|Guest|Visiting|Temp|Limited|Long-distance|Intro/.test(r.f[5]));
+  if(q) rows=rows.filter(r=>(r.f[1]+' '+r.o.name+' '+(r.t?r.t.name:'')).toLowerCase().includes(q));
+  rows.sort((a,b)=> sort==='ld' ? (b.t?.ld||0)-(a.t?.ld||0) : sort==='sink' ? (a.t?.sink||9)-(b.t?.sink||9) : a.f[1].localeCompare(b.f[1]));
+  document.getElementById('gcount').textContent=`${rows.length} gliders`;
+  document.getElementById('glist').innerHTML=rows.map(r=>`<li data-id="${r.o.id}"><span class="num ld">${r.t?r.t.ld:''}</span><span><b>${esc(r.f[1])}</b> <span class="mono small">${esc(r.f[2])}</span><br><span class="small">${esc(r.o.name)} &middot; ${esc(r.f[4]||'')} &middot; ${esc(r.f[5])}</span></span></li>`).join('');
+}
+['gq','gwho','gsort'].forEach(id=>document.getElementById(id).addEventListener('input',renderGliders));
+document.getElementById('glist').addEventListener('click',e=>{const li=e.target.closest('li[data-id]'); if(!li) return; const o=OPS.find(x=>x.id===li.dataset.id); map.setView([o.lat,o.lon],9); showDetail(o.id);});
+const _ds=drawSites; drawSites=function(){_ds(); renderGliders();};
+['vanOnly','tallOnly'].forEach(id=>document.getElementById(id).addEventListener('change',renderGliders));
+rf.addEventListener('change',renderGliders);
+
+drawSites(); renderGliders(); drawField(); loadSites();
+</script>
+</body>
+</html>

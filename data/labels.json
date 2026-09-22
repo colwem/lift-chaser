@@ -1,0 +1,15 @@
+{
+ "rental": {
+  "RENT": "Rents to visitors",
+  "GUEST": "Guest / short-term membership",
+  "JOIN": "Membership required",
+  "UNK": "Unknown, call",
+  "CLOSED": "Closed / inactive"
+ },
+ "access": {
+  "VAN": "Van, 4 h or less",
+  "VANEDGE": "Van, about 4 h",
+  "FLY": "Fly Friday night",
+  "FAR": "Out of range"
+ }
+}

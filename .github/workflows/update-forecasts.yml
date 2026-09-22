@@ -1,0 +1,29 @@
+# Draft. Fetch forecasts on a schedule and publish site/ + cache/ to GitHub Pages.
+# Times are UTC. RASP runs finish overnight; Open-Meteo GFS updates every 6 h.
+name: update-forecasts
+on:
+  schedule:
+    - cron: "15 10,16,22 * * *"   # 06:15, 12:15, 18:15 EDT
+  workflow_dispatch: {}
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python scripts/fetch_forecasts.py
+      - run: python scripts/build_site.py
+      - run: mkdir -p public && cp -r site/index.html cache public/
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: public }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages }
+    steps:
+      - uses: actions/deploy-pages@v4
