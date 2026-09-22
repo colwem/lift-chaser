@@ -1,29 +1,38 @@
-# Draft. Fetch forecasts on a schedule and publish site/ + cache/ to GitHub Pages.
-# Times are UTC. RASP runs finish overnight; Open-Meteo GFS updates every 6 h.
+# Fetch forecasts, build the page and deploy to Cloudflare Pages (project "lift-chaser").
+# Times are UTC. Open-Meteo GFS updates every 6 h; RASP runs finish overnight.
+# Needs repo secrets CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit) and CLOUDFLARE_ACCOUNT_ID.
 name: update-forecasts
 on:
   schedule:
     - cron: "15 10,16,22 * * *"   # 06:15, 12:15, 18:15 EDT
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ["data/**", "site/template.html", "scripts/**", ".github/workflows/**"]
+concurrency: { group: deploy, cancel-in-progress: false }
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      # Add --rasp here once Steve Paavola has agreed to automated fetches.
       - run: python scripts/fetch_forecasts.py
       - run: python scripts/build_site.py
-      - run: mkdir -p public && cp -r site/index.html cache public/
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: public }
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment: { name: github-pages }
-    steps:
-      - uses: actions/deploy-pages@v4
+      - run: mkdir -p public && cp site/index.html public/ && cp -r cache public/ && rm -f public/cache/.gitkeep
+      - name: Create the Pages project if it does not exist yet
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create lift-chaser --production-branch=main
+        continue-on-error: true
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy public --project-name=lift-chaser --branch=main

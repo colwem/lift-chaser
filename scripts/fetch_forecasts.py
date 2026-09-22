@@ -1,19 +1,25 @@
 """Fetch and cache soaring forecasts for every active site.
 
-UNTESTED against the live servers: written 2026-09-22 from the SoaringForecast
-Android app source (github.com/efoertsch/SoaringForecast, MIT) and the Open-Meteo
-docs. The cloud sandbox that wrote this could not reach soargbsc.net or
-api.open-meteo.com. Run it, inspect cache/, and fix field names before trusting it.
+The Open-Meteo part was tested live on 2026-09-22. The RASP part (only run with
+--rasp) is still untested: it was written from the SoaringForecast Android app
+source (github.com/efoertsch/SoaringForecast, MIT). Inspect cache/rasp and fix
+field names before trusting it.
+
+Open-Meteo's free tier counts every location in a multi-point request as one
+call and allows 600 calls a minute, 5,000 an hour and 10,000 a day. One run
+fetches about 1,600 points, so requests are paced to OM_POINTS_PER_MIN.
 
 Outputs (all under cache/):
   rasp/current.json                     GBSC RASP index (regions, dates, soundings)
   rasp/<region>/<date>/status.json      models, corners, times per date
   rasp/<region>/<date>/<model>/<param>.<HHMM>local.d2.body.png   (selected params)
   rasp_points/<site>.json               blipspot text per site / date / time
-  openmeteo/sites.json                  hourly GFS per site (all regions)
+  openmeteo/sites.json                  {fetched, sites: {op id: Open-Meteo response}}, hourly GFS, 7 days
+  openmeteo/grid_<region>.json          {fetched, R, pts, time, vars}: GFS grid for the map field,
+                                        daytime hours only, one value list per variable per point
   manifest.json                         what was fetched, when, errors
 """
-import json, pathlib, sys, time, datetime as dt, urllib.request, urllib.parse
+import json, pathlib, sys, time, datetime as dt, urllib.error, urllib.request, urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
@@ -25,6 +31,12 @@ RASP_TIMES = ["1000", "1200", "1400", "1600"]
 OM_VARS = ("boundary_layer_height,temperature_2m,dew_point_2m,cape,lifted_index,cloud_cover_low,"
            "precipitation_probability,wind_speed_850hPa,wind_direction_850hPa,wind_gusts_10m")
 PAUSE = 1.0  # seconds between requests to other people's servers; be polite
+OM_POINTS_PER_MIN = 450  # stay under Open-Meteo's 600 locations a minute
+# Map grids; keep in step with REGIONS in site/template.html (the page reads R and pts from the file).
+GRIDS = {"ne": {"la": [39.5, 47], "lo": [-80, -67], "s": .5},
+         "east": {"la": [29, 47], "lo": [-90, -67], "s": 1},
+         "conus": {"la": [25, 49], "lo": [-124.5, -67], "s": 1.5}}
+GRID_HOURS = range(8, 20)  # local hours the page's hour slider covers
 
 manifest = {"started": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "ok": [], "errors": []}
 
@@ -85,23 +97,58 @@ def fetch_rasp():
                         cur_pts.setdefault(date, {})[t] = txt.decode("utf-8", "replace")
                         save(f"rasp_points/{sid}.json", json.dumps(cur_pts, indent=1))
 
-def fetch_openmeteo():
+def now_iso():
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+
+def openmeteo(points, tz, label):
+    """Hourly GFS for a list of (lat, lon), in batches of 50, paced and retried on HTTP 429."""
+    out = []
+    for i in range(0, len(points), 50):
+        ch = points[i:i + 50]
+        q = urllib.parse.urlencode(dict(latitude=",".join(f"{la:.3f}" for la, _ in ch),
+                                        longitude=",".join(f"{lo:.3f}" for _, lo in ch),
+                                        hourly=OM_VARS, wind_speed_unit="kn", forecast_days=7, timezone=tz))
+        url = f"https://api.open-meteo.com/v1/gfs?{q}"
+        for attempt in range(3):
+            try:
+                res = get(url); break
+            except urllib.error.HTTPError as e:
+                if e.code != 429 or attempt == 2:
+                    raise
+                time.sleep(65)  # minute limit hit; wait for the window to roll over
+        j = json.loads(res)
+        out += j if isinstance(j, list) else [j]
+        print(f"  {label}: {min(i + 50, len(points))}/{len(points)} points", flush=True)
+        time.sleep(len(ch) * 60 / OM_POINTS_PER_MIN)
+    return out
+
+def fetch_openmeteo_sites():
     ops = [o for o in json.loads((ROOT / "data/operators.json").read_text()) if o["rental"] != "CLOSED"]
-    out = {}
-    for i in range(0, len(ops), 50):
-        ch = ops[i:i + 50]
-        q = urllib.parse.urlencode(dict(latitude=",".join(f"{o['lat']:.3f}" for o in ch),
-                                        longitude=",".join(f"{o['lon']:.3f}" for o in ch),
-                                        hourly=OM_VARS, wind_speed_unit="kn", forecast_days=7, timezone="auto"))
-        res = step(f"open-meteo batch {i}", lambda: get(f"https://api.open-meteo.com/v1/gfs?{q}"))
-        if res:
-            j = json.loads(res); j = j if isinstance(j, list) else [j]
-            for o, r in zip(ch, j):
-                out[o["id"]] = r
-    save("openmeteo/sites.json", json.dumps(out))
+    res = openmeteo([(o["lat"], o["lon"]) for o in ops], "auto", "sites")
+    save("openmeteo/sites.json", json.dumps({"fetched": now_iso(), "model": "GFS",
+                                              "sites": {o["id"]: r for o, r in zip(ops, res)}}))
+
+def fetch_openmeteo_grid(name, R):
+    pts = []
+    la = R["la"][0]
+    while la <= R["la"][1] + 1e-6:
+        lo = R["lo"][0]
+        while lo <= R["lo"][1] + 1e-6:
+            pts.append([round(la, 3), round(lo, 3)]); lo += R["s"]
+        la += R["s"]
+    res = openmeteo(pts, "America/New_York", f"grid {name}")
+    times = res[0]["hourly"]["time"]
+    keep = [i for i, t in enumerate(times) if int(t[11:13]) in GRID_HOURS]
+    rnd = lambda v: None if v is None else round(v, 1)
+    grid = {"fetched": now_iso(), "model": "GFS", "tz": "America/New_York", "R": R, "pts": pts,
+            "time": [times[i] for i in keep],
+            "vars": {v: [[rnd(r["hourly"][v][i]) for i in keep] for r in res] for v in OM_VARS.split(",")}}
+    save(f"openmeteo/grid_{name}.json", json.dumps(grid, separators=(",", ":")))
 
 if __name__ == "__main__":
-    fetch_openmeteo()
+    step("open-meteo sites", fetch_openmeteo_sites)
+    for name, R in GRIDS.items():
+        step(f"open-meteo grid {name}", lambda: fetch_openmeteo_grid(name, R))
     # RASP is opt-in until Steve Paavola (GBSC) has agreed to automated fetches; see CLAUDE.md.
     if "--rasp" in sys.argv:
         fetch_rasp()

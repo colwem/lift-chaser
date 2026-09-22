@@ -38,6 +38,7 @@ table.spec th{font-size:11px;text-transform:uppercase;color:var(--muted);letter-
 #glist{list-style:none;margin:6px 0 0;padding:0;max-height:320px;overflow-y:auto;border-top:1px solid var(--line)}
 #glist li{display:grid;grid-template-columns:38px 1fr;gap:6px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px}
 #glist li:hover{background:var(--accent-2)}
+.stale{color:#b3261e}
 #glist .ld{font-weight:600;color:var(--accent);text-align:center}
 input[type=search]{font-family:inherit;font-size:14px;padding:5px 6px;border:1px solid var(--line);border-radius:4px;width:100%}
 h1{font-size:22px;margin:0 0 2px;letter-spacing:.2px}
@@ -284,18 +285,43 @@ async function fetchPoints(pts, tz){
   for(let i=0;i<pts.length;i+=n){
     const ch=pts.slice(i,i+n);
     const url=`https://api.open-meteo.com/v1/gfs?latitude=${ch.map(p=>p[0].toFixed(2)).join(',')}&longitude=${ch.map(p=>p[1].toFixed(2)).join(',')}&hourly=${VARS}&wind_speed_unit=kn&forecast_days=7&timezone=${encodeURIComponent(tz)}`;
-    const r = await fetch(url); if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status);
+    const r = await fetch(url);
+    if(r.status===429) throw new Error("Open-Meteo's free limit (600 points a minute) was reached. Wait a minute and reload");
+    if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status);
     const j = await r.json(); (Array.isArray(j)?j:[j]).forEach(x=>out.push(x));
     status(`Loading forecast ${Math.min(i+n,pts.length)} / ${pts.length} points`);
   }
   return out;
 }
+// scripts/fetch_forecasts.py writes cache/openmeteo/*.json. Hosted, cache/ sits beside index.html;
+// in local dev the page is served from /site/ and cache/ is one level up. Opened from disk, both fail
+// and the page falls back to fetching Open-Meteo live.
+const STALE_H = 12;
+async function cached(path){
+  for(const base of ['cache/','../cache/']){
+    try{ const r=await fetch(base+path,{cache:'no-cache'}); if(r.ok) return await r.json(); }catch(e){}
+  }
+  return null;
+}
+function srcText(src, fetched){
+  if(src!=='cache') return 'fetched live just now';
+  const h=(Date.now()-Date.parse(fetched))/36e5;
+  const when=new Date(fetched).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const age=h<1?`${Math.round(h*60)} min`:`${Math.round(h)} h`;
+  return h>STALE_H ? `<b class="stale">STALE: fetched ${when}, ${age} ago</b>` : `fetched ${when} (${age} ago)`;
+}
 async function loadGrid(reg){
   if(gridCache[reg]) return gridCache[reg];
+  const c = await cached(`openmeteo/grid_${reg}.json`);
+  if(c){
+    // rebuild Open-Meteo-shaped responses so val() works on either source
+    const res = c.pts.map((_,k)=>({hourly:Object.fromEntries([['time',c.time],...Object.entries(c.vars).map(([v,a])=>[v,a[k]])])}));
+    return gridCache[reg] = {R:c.R, pts:c.pts, res, src:'cache', fetched:c.fetched};
+  }
   const R=REGIONS[reg], pts=[];
   for(let la=R.la[0];la<=R.la[1]+1e-6;la+=R.s) for(let lo=R.lo[0];lo<=R.lo[1]+1e-6;lo+=R.s) pts.push([la,lo]);
   const res = await fetchPoints(pts,'America/New_York');
-  return gridCache[reg] = {R, pts, res};
+  return gridCache[reg] = {R, pts, res, src:'live'};
 }
 function val(h, i, v){
   const g=k=>h[k][i];
@@ -350,7 +376,7 @@ async function drawField(){
   document.getElementById('hourLabel').textContent=`${String(hour).padStart(2,'0')}:00 ET`;
   legend(v); fieldLayer.clearLayers();
   if(v==='none'){status('');return;}
-  let g; try{ g=await loadGrid(reg);}catch(e){status('Forecast unavailable: '+e.message+'. Check your connection; Open-Meteo is free and needs no key.');return;}
+  let g; try{ g=await loadGrid(reg);}catch(e){status('Forecast unavailable: '+e.message+'.');return;}
   const t = `${dayKey()}T${String(hour).padStart(2,'0')}:00`;
   const sc=SCALES[v], half=g.R.s/2;
   g.res.forEach((r,k)=>{
@@ -364,7 +390,7 @@ async function drawField(){
       L.marker([la,lo],{pane:'field',interactive:false,icon:L.divIcon({className:'wind-arrow',html:`<div style="transform:rotate(${d+180}deg)">&#x2191;</div>`,iconSize:[15,15]})}).addTo(fieldLayer);
     }
   });
-  status(`${dayLabel()} ${String(hour).padStart(2,'0')}:00 ET, GFS. ${g.pts.length} grid points.`);
+  document.getElementById('status').innerHTML=`${dayLabel()} ${String(hour).padStart(2,'0')}:00 ET. GFS via Open-Meteo, ${srcText(g.src,g.fetched)}. ${g.pts.length} grid points.`;
 }
 ['variable','region','day'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{drawField();if(id==='day')renderRank();}));
 document.getElementById('hour').addEventListener('input',drawField);
@@ -372,11 +398,22 @@ document.getElementById('opacity').addEventListener('input',()=>{const op=+docum
 
 // ---------- per-site daily forecast ----------
 const siteFc = {};
+let siteSrc = {state:'loading'};
 async function loadSites(){
   const live = OPS.filter(o=>o.rental!=='CLOSED');
-  let res; try{ res = await fetchPoints(live.map(o=>[o.lat,o.lon]),'auto'); }catch(e){ return; }
-  res.forEach((r,k)=>{
-    const o=live[k], h=r.hourly, byDay={};
+  let pairs;
+  const c = await cached('openmeteo/sites.json');
+  if(c && c.sites){
+    pairs = live.filter(o=>c.sites[o.id]).map(o=>[o,c.sites[o.id]]);
+    siteSrc = {state:'ok', src:'cache', fetched:c.fetched};
+  } else {
+    let res; try{ res = await fetchPoints(live.map(o=>[o.lat,o.lon]),'auto'); }
+    catch(e){ siteSrc = {state:'error', msg:e.message}; renderRank(); return; }
+    pairs = live.map((o,k)=>[o,res[k]]);
+    siteSrc = {state:'ok', src:'live'};
+  }
+  pairs.forEach(([o,r])=>{
+    const h=r.hourly, byDay={};
     h.time.forEach((t,i)=>{
       const hr=+t.slice(11,13); if(hr<11||hr>17) return;
       const d=t.slice(0,10); (byDay[d] ||= []).push(i);
@@ -398,8 +435,10 @@ function circMean(a){const s=a.reduce((x,d)=>x+Math.sin(d*Math.PI/180),0),c=a.re
 function renderRank(){
   const ol=document.getElementById('rank'); const d=dayKey();
   const rows = visibleOps().filter(o=>siteFc[o.id]?.[d]).map(o=>({o,f:siteFc[o.id][d]})).sort((a,b)=>b.f.score-a.f.score).slice(0,15);
-  if(!rows.length){ol.innerHTML='<li class="small" style="display:block">Loading site forecasts...</li>';return;}
-  ol.innerHTML = rows.map(({o,f})=>`<li data-id="${o.id}"><span class="score" style="background:${color(f.score,RANKSC)}">${f.score.toFixed(1)}</span><span>${esc(o.name)}<br><span class="small">${f.ridge>f.th?'ridge ':''}${ACCESS[o.access]} &middot; ${RENTAL[o.rental][0]}</span></span><span class="dot" style="background:var(${RENTAL[o.rental][1]})"></span></li>`).join('');
+  const note = t => `<li class="small" style="display:block">${t}</li>`;
+  if(siteSrc.state==='error'){ol.innerHTML=note(`Site forecasts unavailable: ${esc(siteSrc.msg)}.`);return;}
+  if(!rows.length){ol.innerHTML=note(siteSrc.state==='loading'?'Loading site forecasts...':'No site forecast for this day.');return;}
+  ol.innerHTML = note(`GFS via Open-Meteo, ${srcText(siteSrc.src,siteSrc.fetched)}.`) + rows.map(({o,f})=>`<li data-id="${o.id}"><span class="score" style="background:${color(f.score,RANKSC)}">${f.score.toFixed(1)}</span><span>${esc(o.name)}<br><span class="small">${f.ridge>f.th?'ridge ':''}${ACCESS[o.access]} &middot; ${RENTAL[o.rental][0]}</span></span><span class="dot" style="background:var(${RENTAL[o.rental][1]})"></span></li>`).join('');
 }
 document.getElementById('rank').addEventListener('click',e=>{const li=e.target.closest('li[data-id]'); if(!li) return; const o=OPS.find(x=>x.id===li.dataset.id); map.setView([o.lat,o.lon],9); showDetail(o.id);});
 
