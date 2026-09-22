@@ -22,7 +22,7 @@ body{font-family:var(--font);color:var(--ink);background:var(--bg);font-size:15p
 #side{border-right:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:14px 16px 24px}
 #mapwrap{position:relative;height:100%}
 #map{height:100%}
-#detail{position:absolute;top:0;right:0;bottom:0;width:min(640px,100%);background:var(--bg);border-left:1px solid var(--line);box-shadow:-6px 0 18px rgba(22,37,47,.12);overflow-y:auto;padding:16px 18px 28px;z-index:1000}
+#detail{position:absolute;top:0;right:0;bottom:0;width:min(760px,100%);background:var(--bg);border-left:1px solid var(--line);box-shadow:-6px 0 18px rgba(22,37,47,.12);overflow-y:auto;padding:16px 18px 28px;z-index:1000}
 #detail h2{margin:0 0 2px;font-size:22px;padding-right:70px}
 #detail h3{margin:16px 0 6px;font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 #detail .meta{color:var(--muted);font-size:13px;margin-bottom:6px}
@@ -30,9 +30,9 @@ body{font-family:var(--font);color:var(--ink);background:var(--bg);font-size:15p
 #detail dl{display:grid;grid-template-columns:100px 1fr;gap:4px 10px;margin:10px 0;font-size:14px}
 #detail dt{font-weight:600;color:var(--muted)} #detail dd{margin:0}
 .tw{overflow-x:auto}
-table.spec{border-collapse:collapse;font-size:12.5px;min-width:760px}
+table.spec{border-collapse:collapse;font-size:12px;width:100%}
 table.spec th,table.spec td{border-bottom:1px solid var(--line);padding:3px 5px;text-align:left;vertical-align:top}
-table.spec td:first-child{min-width:170px}
+table.spec td:first-child{min-width:110px}
 table.spec th{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em;white-space:nowrap}
 .num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
 #glist{list-style:none;margin:6px 0 0;padding:0;max-height:320px;overflow-y:auto;border-top:1px solid var(--line)}
@@ -179,6 +179,8 @@ function fleetSummary(id){
 
 // ---------- map ----------
 const map = L.map('map', {zoomControl:true}).setView([42.3, -73.5], 6);
+// Forecast cells get their own pane under the overlay pane, so they never cover (and swallow clicks on) site markers.
+map.createPane('field').style.zIndex = 350;
 const base = {
   "Light gray": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,maxNativeZoom:16,attribution:'Esri, HERE, Garmin, USGS'}),
   "USGS topo": L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,maxNativeZoom:16,attribution:'USGS The National Map'}),
@@ -186,6 +188,12 @@ const base = {
   "Shaded relief": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,maxNativeZoom:13,attribution:'Esri'}),
   "Satellite imagery": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri, Maxar'})
 };
+// Tile servers occasionally reset a connection; retry each failed tile once instead of leaving a gray hole.
+Object.values(base).forEach(l => l.on('tileerror', e => {
+  if (e.tile.dataset.retried) return;
+  e.tile.dataset.retried = '1';
+  setTimeout(() => { e.tile.src = e.tile.src.split('#')[0] + '#retry'; }, 1000);
+}));
 base["Light gray"].addTo(map);
 L.control.layers(base, null, {position:'topright'}).addTo(map);
 
@@ -349,11 +357,11 @@ async function drawField(){
     const i=r.hourly.time.indexOf(t); if(i<0) return;
     const x=val(r.hourly,i,v), c=color(x,sc); if(!c) return;
     const [la,lo]=g.pts[k];
-    L.rectangle([[la-half,lo-half],[la+half,lo+half]],{stroke:false,fillColor:c,fillOpacity:op,interactive:true})
+    L.rectangle([[la-half,lo-half],[la+half,lo+half]],{pane:'field',stroke:false,fillColor:c,fillOpacity:op,interactive:true})
       .bindTooltip(`${Math.round(x*10)/10}${sc.u}`,{sticky:true}).addTo(fieldLayer);
     if(v==='w850'||v==='gust'){
       const d=r.hourly.wind_direction_850hPa[i];
-      L.marker([la,lo],{interactive:false,icon:L.divIcon({className:'wind-arrow',html:`<div style="transform:rotate(${d+180}deg)">&#x2191;</div>`,iconSize:[15,15]})}).addTo(fieldLayer);
+      L.marker([la,lo],{pane:'field',interactive:false,icon:L.divIcon({className:'wind-arrow',html:`<div style="transform:rotate(${d+180}deg)">&#x2191;</div>`,iconSize:[15,15]})}).addTo(fieldLayer);
     }
   });
   status(`${dayLabel()} ${String(hour).padStart(2,'0')}:00 ET, GFS. ${g.pts.length} grid points.`);

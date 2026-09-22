@@ -13,10 +13,11 @@ Outputs (all under cache/):
   openmeteo/sites.json                  hourly GFS per site (all regions)
   manifest.json                         what was fetched, when, errors
 """
-import json, pathlib, time, datetime as dt, urllib.request, urllib.parse
+import json, pathlib, sys, time, datetime as dt, urllib.request, urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
+# Add a contact address here once you decide which one to publish to these servers.
 UA = {"User-Agent": "chase-lift/0.1 (personal soaring planner)"}
 RASP_PARAMS_IMG = ["wstar_bsratio", "hglider", "zsfclclmask", "blwind", "wind850", "press850"]
 RASP_PARAMS_POINT = "wstar bsratio hglider zsfclcl zsfclcldif zblcl blwind bltopwind sfcwind wind850 rain1 cape"
@@ -25,7 +26,7 @@ OM_VARS = ("boundary_layer_height,temperature_2m,dew_point_2m,cape,lifted_index,
            "precipitation_probability,wind_speed_850hPa,wind_direction_850hPa,wind_gusts_10m")
 PAUSE = 1.0  # seconds between requests to other people's servers; be polite
 
-manifest = {"started": dt.datetime.utcnow().isoformat() + "Z", "ok": [], "errors": []}
+manifest = {"started": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "ok": [], "errors": []}
 
 def get(url, data=None):
     req = urllib.request.Request(url, data=data, headers=UA)
@@ -101,7 +102,9 @@ def fetch_openmeteo():
 
 if __name__ == "__main__":
     fetch_openmeteo()
-    fetch_rasp()
-    manifest["finished"] = dt.datetime.utcnow().isoformat() + "Z"
+    # RASP is opt-in until Steve Paavola (GBSC) has agreed to automated fetches; see CLAUDE.md.
+    if "--rasp" in sys.argv:
+        fetch_rasp()
+    manifest["finished"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
     save("manifest.json", json.dumps(manifest, indent=1))
     print(json.dumps({k: (len(v) if isinstance(v, list) else v) for k, v in manifest.items()}, indent=1))
