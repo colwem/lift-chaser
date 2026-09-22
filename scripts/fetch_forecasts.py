@@ -54,7 +54,11 @@ def step(label, fn):
     try:
         out = fn(); manifest["ok"].append(label); return out
     except Exception as e:  # keep going; one dead source must not kill the run
-        manifest["errors"].append(f"{label}: {e!r}"); return None
+        body = ""
+        if isinstance(e, urllib.error.HTTPError):
+            try: body = " " + e.read().decode("utf-8", "replace")[:300]
+            except Exception: pass
+        manifest["errors"].append(f"{label}: {e!r}{body}"); return None
     finally:
         time.sleep(PAUSE)
 
@@ -155,3 +159,5 @@ if __name__ == "__main__":
     manifest["finished"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
     save("manifest.json", json.dumps(manifest, indent=1))
     print(json.dumps({k: (len(v) if isinstance(v, list) else v) for k, v in manifest.items()}, indent=1))
+    for e in manifest["errors"]:
+        print("ERROR", e)

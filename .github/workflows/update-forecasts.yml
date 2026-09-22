@@ -20,6 +20,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      # Start from the deployed cache, so a failed fetch keeps the last good forecast
+      # (the page flags it stale after 12 h) instead of publishing none.
+      - name: Seed cache from the live site
+        run: |
+          mkdir -p cache/openmeteo
+          for f in sites grid_ne grid_east grid_conus; do
+            curl -fsS -o "cache/openmeteo/$f.json" "https://lift-chaser.pages.dev/cache/openmeteo/$f.json" \
+              && python -c "import json,sys; json.load(open(sys.argv[1]))" "cache/openmeteo/$f.json" \
+              || rm -f "cache/openmeteo/$f.json"
+          done
       # Add --rasp here once Steve Paavola has agreed to automated fetches.
       - run: python scripts/fetch_forecasts.py
       - run: python scripts/build_site.py
