@@ -2,6 +2,16 @@
 
 Personal soaring-trip planner: site register, global glider list, and forecast map. See CLAUDE.md for the full handoff, data schema and backlog.
 
+**Live site: https://lift-chaser.pages.dev**
+
+## How it is deployed
+
+1. A GitHub Actions job (`.github/workflows/update-forecasts.yml`) runs at 06:15, 12:15 and 18:15 Eastern, on every push to `main` that touches data, scripts or the page, and on demand (repo > Actions > update-forecasts > Run workflow).
+1. It fetches forecasts into `cache/`, builds `site/index.html`, and uploads both to the Cloudflare Pages project `lift-chaser`.
+1. Cloudflare serves the result as static files. If a fetch fails, the previous forecast is kept, and the page marks it stale after 12 h.
+
+Repo secrets needed: `CLOUDFLARE_API_TOKEN` (Account > Cloudflare Pages > Edit) and `CLOUDFLARE_ACCOUNT_ID`.
+
 ## Run it locally (Windows)
 
 Needs Python 3.12. The core scripts use only the standard library. The workbook and PDF builders in `legacy/` also need `openpyxl` and `reportlab`.
