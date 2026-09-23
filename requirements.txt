@@ -1,0 +1,6 @@
+# scripts/fetch_models.py (NOAA GFS and HRRR). The other scripts use only the standard library.
+# eccodes pulls in eccodeslib (the compiled GRIB library) on Linux; Windows wheels bundle it.
+eccodes==2.48.0
+numpy==2.5.3
+pillow==12.3.0
+pyproj==3.8.0

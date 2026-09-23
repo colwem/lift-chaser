@@ -79,6 +79,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .pop .fc{background:var(--accent-2);border-radius:4px;padding:6px 8px;margin:6px 0;font-size:13px}
 .pop .links a{margin-right:8px;font-size:13px}
 .pop .proc{font-size:12.5px;max-height:90px;overflow:auto;color:#2c3a42}
+.readout{background:rgba(255,255,255,.92);padding:3px 8px;border-radius:4px;font-family:var(--mono);font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .wind-arrow{color:#16252f;font-size:15px;line-height:15px;text-shadow:0 0 3px #fff,0 0 3px #fff}
 @media (max-width:760px){#app{grid-template-columns:1fr;grid-template-rows:48% 52%}#side{order:2;border-right:0;border-top:1px solid var(--line)}}
 </style>
@@ -91,7 +92,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
   <div class="small mono" id="build"></div>
 
   <fieldset>
-    <legend>Forecast field (GFS via Open-Meteo)</legend>
+    <legend id="fieldLegend">Forecast field (GFS via Open-Meteo)</legend>
     <select id="variable" aria-label="Forecast variable">
       <option value="score">Soaring index (heuristic, 0 to 10)</option>
       <option value="blh">Boundary layer height (thermal depth), ft AGL</option>
@@ -110,6 +111,11 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
         <option value="ne">Northeast (0.5 deg)</option>
         <option value="east">Eastern US (1 deg)</option>
         <option value="conus">Whole US (1.5 deg)</option>
+      </select>
+      <select id="model" aria-label="Forecast model" hidden>
+        <option value="auto">Best available: HRRR, then GFS</option>
+        <option value="hrrr">HRRR 3 km (days 1 to 2)</option>
+        <option value="gfs">GFS 25 km (days 1 to 7)</option>
       </select>
     </div>
     <div class="row" style="margin-top:8px">
@@ -249,7 +255,7 @@ function popup(o){
   const fl = (fleetBy[o.id]||[]).map(f=>`<tr><td>${esc(f[1])}</td><td class="mono">${esc(f[2]||'')}</td><td>${esc(f[4])}</td><td>${esc(f[5])}</td></tr>`).join('');
   const fc = siteFc[o.id]?.[dayKey()];
   const fcHtml = fc ? `<div class="fc"><b>${dayLabel()}</b>, 11:00 to 17:00 local: index <b>${fc.score.toFixed(1)}</b> (thermal ${fc.th.toFixed(1)}${RIDGE[o.id]?`, ridge ${fc.ridge.toFixed(1)}`:''})<br>
-    BL max ${fmt(fc.blh)} ft AGL, cu base ~${fmt(fc.cb)} ft AGL, 850 hPa ${Math.round(fc.w850)} kt from ${Math.round(fc.d850)}&deg;, gusts ${Math.round(fc.gust)} kt, rain ${Math.round(fc.pop)}%, CAPE ${Math.round(fc.cape)}</div>` : `<div class="fc small">Site forecast loading or unavailable.</div>`;
+    ${fc.wstar!=null?`W* max ${Math.round(fc.wstar)} fpm, `:''}BL max ${fmt(fc.blh)} ft AGL, cu base ~${fmt(fc.cb)} ft AGL, 850 hPa ${Math.round(fc.w850)} kt from ${Math.round(fc.d850)}&deg;, gusts ${Math.round(fc.gust)} kt, rain ${fc.rate?`max ${fc.rain.toFixed(1)} mm/h`:Math.round(fc.rain)+'%'}, CAPE ${Math.round(fc.cape)}<br><span class="small">${esc(fc.src)}</span></div>` : `<div class="fc small">Site forecast loading or unavailable.</div>`;
   const lk = `https://www.windy.com/?${o.lat},${o.lon},9`;
   return `<div class="pop"><h3>${esc(o.name)}</h3>
   <div class="meta">${esc(o.kind)} &middot; ${esc(o.airport)} &middot; ${esc(o.city)}</div>
@@ -349,12 +355,13 @@ function fetchPoints(pts, tz, msg=status){
 // in local dev the page is served from /site/ and cache/ is one level up. Opened from disk, both fail
 // and the page falls back to fetching Open-Meteo live.
 const STALE_H = 12;
-async function cached(path){
+async function cachedAt(path){
   for(const base of ['cache/','../cache/']){
-    try{ const r=await fetch(base+path,{cache:'no-cache'}); if(r.ok) return await r.json(); }catch(e){}
+    try{ const r=await fetch(base+path,{cache:'no-cache'}); if(r.ok) return [await r.json(), base]; }catch(e){}
   }
-  return null;
+  return [null, null];
 }
+async function cached(path){ return (await cachedAt(path))[0]; }
 function srcText(src, fetched){
   if(src!=='cache') return 'fetched live just now';
   const h=(Date.now()-Date.parse(fetched))/36e5;
@@ -393,16 +400,23 @@ function val(h, i, v){
     case 'score': return thermalScore(g('boundary_layer_height')*3.281,g('cloud_cover_low'),g('precipitation_probability'),g('cape'));
   }
 }
-function thermalScore(blhFt, low, pop, cape){
+// rain is a probability in % (Open-Meteo) or, with rate=true, a model rain rate in mm/h (NOAA).
+// Same formula as thermal_score() in scripts/fetch_models.py.
+const rainCut = (rain, rate) => Math.min(1,Math.max(0, rate ? (rain-0.1)/1.0 : (rain-20)/60));
+function thermalScore(blhFt, low, rain, cape, rate=false){
   let s = Math.max(0,Math.min(1,(blhFt-1500)/5000))*10;
   s *= 1 - Math.min(1,Math.max(0,(low-30)/60))*0.7;
-  s *= 1 - Math.min(1,Math.max(0,(pop-20)/60))*0.8;
+  s *= 1 - rainCut(rain, rate)*0.8;
   if(cape>1500) s *= 0.7;
   return s;
 }
 const RANKSC={min:0,max:10,c:['#9aa7ae','#6fae8c','#2f9e6b','#0b6b45']};
 const SCALES = {
-  score:{min:0,max:10,c:['#f1f5f7','#c9e7d6','#7cc8a0','#2f9e6b','#0b6b45'],u:''},
+  score:{min:0,max:10,c:['#eadfc8','#c9e7d6','#7cc8a0','#2f9e6b','#0b6b45'],u:''},
+  wstar:{min:0,max:800,c:['#eadfc8','#f6e3a4','#9fd08a','#2f9e6b','#0b5d3f'],u:' fpm'},
+  w700:{min:0,max:60,c:['#f1f5f7','#cfe0ea','#8bb4d0','#e0a458','#c0392b'],u:' kt'},
+  tcdc:{min:0,max:100,c:['#ffffff','#e4e8eb','#b9c2c8','#7f8b93','#4b555c'],u:' %'},
+  prate:{min:0,max:5,c:['#ffffff','#bfe3f5','#5fb0e0','#2f6fc0','#6a2c91'],u:' mm/h'},
   blh:{min:0,max:8000,c:['#f1f5f7','#cfe6f2','#79b8dd','#2f7fc0','#1b3f8a'],u:' ft'},
   cbase:{min:0,max:9000,c:['#f7efe3','#e8d3a7','#a9c98f','#4fa37a','#1f6b5f'],u:' ft'},
   w850:{min:0,max:45,c:['#f1f5f7','#cfe0ea','#8bb4d0','#e0a458','#c0392b'],u:' kt'},
@@ -413,12 +427,15 @@ const SCALES = {
   pop:{min:0,max:100,c:['#ffffff','#d6ecd2','#8ccf86','#3e9e5f','#1d6340'],u:' %'},
 };
 function hex2rgb(h){h=h.replace('#','');return [0,2,4].map(i=>parseInt(h.substr(i,2),16));}
-function color(v, sc){
-  if(v==null||isNaN(v)) return null;
+function rgbOf(v, sc){
   let t=(v-sc.min)/(sc.max-sc.min); t=Math.max(0,Math.min(1,t));
   const n=sc.c.length-1, i=Math.min(n-1,Math.floor(t*n)), f=t*n-i;
   const a=hex2rgb(sc.c[i]), b=hex2rgb(sc.c[i+1]);
-  return `rgb(${a.map((x,k)=>Math.round(x+(b[k]-x)*f)).join(',')})`;
+  return a.map((x,k)=>Math.round(x+(b[k]-x)*f));
+}
+function color(v, sc){
+  if(v==null||isNaN(v)) return null;
+  return `rgb(${rgbOf(v,sc).join(',')})`;
 }
 function legend(v){
   const el=document.getElementById('legend');
@@ -428,6 +445,7 @@ function legend(v){
 }
 let drawSeq = 0;
 async function drawField(){
+  if(MI) return drawModelField();
   const v=document.getElementById('variable').value, reg=document.getElementById('region').value;
   const hour=+document.getElementById('hour').value, op=+document.getElementById('opacity').value;
   document.getElementById('hourLabel').textContent=`${String(hour).padStart(2,'0')}:00 ET`;
@@ -452,9 +470,188 @@ async function drawField(){
   });
   document.getElementById('status').innerHTML=`${dayLabel()} ${String(hour).padStart(2,'0')}:00 ET. GFS via Open-Meteo, ${srcText(g.src,g.fetched)}. ${g.pts.length} grid points.`;
 }
-['variable','region','day'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{drawField();if(id==='day')renderRank();}));
+['variable','region','model','day'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{drawField();if(id==='day')renderRank();}));
 document.getElementById('hour').addEventListener('input',drawField);
-document.getElementById('opacity').addEventListener('input',()=>{const op=+document.getElementById('opacity').value;fieldLayer.eachLayer(l=>l.setStyle&&l.setStyle({fillOpacity:op}));});
+document.getElementById('opacity').addEventListener('input',()=>{const op=+document.getElementById('opacity').value;fieldLayer.eachLayer(l=>l.setStyle&&l.setStyle({fillOpacity:op}));if(fieldOverlay)fieldOverlay.setOpacity(op);});
+
+// ---------- NOAA model layers (scripts/fetch_models.py) ----------
+// cache/models/index.json lists each model's run, hours and image bounds. Each variable and hour is an
+// 8-bit grayscale PNG: value = lo + byte * (hi - lo) / 254, byte 255 = no data. Image rows are evenly
+// spaced in Web Mercator, so an image lies straight on the map between its bounds.
+let MI = null;                     // models index; null means fall back to Open-Meteo
+const MODEL_VARS = [
+  ['score','Soaring index (heuristic, 0 to 10)'], ['wstar','W* thermal strength, fpm'],
+  ['blh','Boundary layer top (thermal depth), ft AGL'], ['cbase','Estimated cumulus base, ft AGL'],
+  ['w850','850 hPa wind (~5,000 ft MSL), kt + arrows'], ['w700','700 hPa wind (~10,000 ft MSL), kt'],
+  ['gust','10 m wind gusts, kt + 850 hPa arrows'], ['cape','CAPE (overdevelopment risk), J/kg'],
+  ['li','Lifted index (lower = more unstable)'], ['low','Low cloud cover, %'], ['tcdc','Total cloud cover, %'],
+  ['prate','Rain rate, mm/h'], ['none','(no forecast field)']];
+const imgCache = new Map();        // "model/hour/var" -> Promise<{bytes, w, h}>, most recent last
+const IMG_CACHE_MAX = 30;
+let fieldOverlay = null, cur = null, dirImg = null;
+const arrowLayer = L.layerGroup().addTo(map);
+// ImageOverlay that shows a canvas we colored ourselves instead of loading an <img>
+const CanvasOverlay = L.ImageOverlay.extend({
+  _initImage(){
+    const el = this._image = this._url;
+    L.DomUtil.addClass(el,'leaflet-image-layer');
+    if(this._zoomAnimated) L.DomUtil.addClass(el,'leaflet-zoom-animated');
+    this._updateOpacity();
+  }
+});
+const pad2 = n => String(n).padStart(2,'0');
+const keyMs = k => Date.UTC(+k.slice(0,4), +k.slice(4,6)-1, +k.slice(6,8), +k.slice(8,10));
+const msKey = t => { const D=new Date(t); return `${D.getUTCFullYear()}${pad2(D.getUTCMonth()+1)}${pad2(D.getUTCDate())}${pad2(D.getUTCHours())}`; };
+const etHourFmt = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',hourCycle:'h23'});
+function etToUtcKey(day, hour){  // "YYYY-MM-DD" and an Eastern-time hour -> UTC "YYYYMMDDHH"
+  const [y,mo,d] = day.split('-').map(Number);
+  let t = Date.UTC(y,mo-1,d,hour+5);                   // right for EST; one hour late in EDT
+  t -= (+etHourFmt.format(new Date(t)) - hour) * 36e5;
+  return msKey(t);
+}
+const etLabel = k => new Date(keyMs(k)).toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',hour:'numeric'});
+function pickModel(key){
+  const want = document.getElementById('model').value;
+  const order = want==='auto' ? ['hrrr','gfs'] : [want];
+  for(const name of order){
+    const m = MI.models[name]; if(!m) continue;
+    if(m.hours.includes(key)) return {name, hour:key};
+    // GFS is 3-hourly after day 5: take the nearest hour within 2 h
+    let best=null, bd=Infinity;
+    m.hours.forEach(h=>{ const d=Math.abs(keyMs(h)-keyMs(key)); if(d<bd){bd=d; best=h;} });
+    if(best && bd<=2*36e5 && (want!=='auto' || name!=='hrrr')) return {name, hour:best};
+  }
+  return null;
+}
+function loadBytes(model, hour, v){
+  const k = `${model}/${hour}/${v}`;
+  if(imgCache.has(k)){ const p=imgCache.get(k); imgCache.delete(k); imgCache.set(k,p); return p; }
+  const m = MI.models[model];
+  const p = new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+      const x = c.getContext('2d', {willReadFrequently:true}); x.drawImage(im,0,0);
+      const d = x.getImageData(0,0,c.width,c.height).data, b = new Uint8Array(c.width*c.height);
+      for(let i=0;i<b.length;i++) b[i] = d[i*4];
+      res({bytes:b, w:c.width, h:c.height});
+    };
+    im.onerror = () => rej(new Error('missing image '+k));
+    im.src = MI.base + m.path.replace('{hour}',hour).replace('{var}',v);
+  });
+  p.catch(()=>imgCache.delete(k));
+  imgCache.set(k,p);
+  while(imgCache.size>IMG_CACHE_MAX) imgCache.delete(imgCache.keys().next().value);
+  return p;
+}
+const byteVal = (v, b) => b===255 ? null : MI.vars[v].lo + b*(MI.vars[v].hi-MI.vars[v].lo)/254;
+const mercY = lat => Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360));
+function sampleAt(img, bounds, lat, lon){  // byte under a lat/lon, or 255 outside the image
+  const [[s,w],[n,e]] = bounds;
+  const col = Math.floor((lon-w)/(e-w)*img.w), row = Math.floor((mercY(n)-mercY(lat))/(mercY(n)-mercY(s))*img.h);
+  return (col<0||row<0||col>=img.w||row>=img.h) ? 255 : img.bytes[row*img.w+col];
+}
+function colorize(img, v){
+  const sc = SCALES[v], lut = new Uint8ClampedArray(256*4);
+  for(let b=0;b<255;b++){ const [r,g,bl] = rgbOf(byteVal(v,b), sc); lut.set([r,g,bl,255], b*4); }
+  const c = document.createElement('canvas'); c.width = img.w; c.height = img.h;
+  const x = c.getContext('2d'), id = x.createImageData(img.w, img.h), px = id.data;
+  for(let i=0;i<img.bytes.length;i++){ const o=img.bytes[i]*4; px[i*4]=lut[o]; px[i*4+1]=lut[o+1]; px[i*4+2]=lut[o+2]; px[i*4+3]=lut[o+3]; }
+  x.putImageData(id,0,0);
+  return c;
+}
+function drawArrows(){
+  arrowLayer.clearLayers();
+  if(!cur || !dirImg || !['w850','gust'].includes(cur.v)) return;
+  const size = map.getSize(), step = 60;
+  for(let y=step/2; y<size.y; y+=step) for(let x=step/2; x<size.x; x+=step){
+    const ll = map.containerPointToLatLng([x,y]), b = sampleAt(dirImg, cur.bounds, ll.lat, ll.lng);
+    if(b===255) continue;
+    const d = byteVal('d850', b);
+    L.marker(ll,{pane:'field',interactive:false,icon:L.divIcon({className:'wind-arrow',html:`<div style="transform:rotate(${d+180}deg)">&#x2191;</div>`,iconSize:[15,15]})}).addTo(arrowLayer);
+  }
+}
+map.on('moveend', drawArrows);
+const readout = L.control({position:'bottomleft'});
+readout.onAdd = () => { const d = L.DomUtil.create('div','readout'); d.id='readout'; d.hidden=true; return d; };
+readout.addTo(map);
+map.on('mousemove', e => {
+  const el = document.getElementById('readout');
+  if(!cur){ el.hidden = true; return; }
+  const b = sampleAt(cur.img, cur.bounds, e.latlng.lat, e.latlng.lng), x = byteVal(cur.v, b);
+  el.hidden = false;
+  el.textContent = x==null ? 'no data here' : `${cur.v==='score'?x.toFixed(1):Math.round(x).toLocaleString()}${SCALES[cur.v].u}  (${cur.label})`;
+});
+map.on('mouseout', () => { document.getElementById('readout').hidden = true; });
+function runText(m){
+  return new Date(m.cycle).toLocaleString('en-US',{timeZone:'UTC',month:'short',day:'numeric',hour:'2-digit',hourCycle:'h23'}).replace(/, (\d\d)$/,' $1Z') ;
+}
+async function drawModelField(){
+  const v = document.getElementById('variable').value, hour = +document.getElementById('hour').value;
+  const op = +document.getElementById('opacity').value;
+  document.getElementById('hourLabel').textContent = `${pad2(hour)}:00 ET`;
+  const seq = ++drawSeq;
+  legend(v);
+  if(v==='none'){ if(fieldOverlay){map.removeLayer(fieldOverlay); fieldOverlay=null;} cur=null; arrowLayer.clearLayers(); status(''); return; }
+  const key = etToUtcKey(dayKey(), hour), pick = pickModel(key);
+  if(!pick){
+    if(fieldOverlay){map.removeLayer(fieldOverlay); fieldOverlay=null;} cur=null; arrowLayer.clearLayers();
+    status(`No ${document.getElementById('model').selectedOptions[0].text.replace(/ \(.*/,'')} forecast for ${dayLabel()} ${pad2(hour)}:00 ET in the current runs.`);
+    return;
+  }
+  const m = MI.models[pick.name];
+  status(`Loading ${m.label} ${VNAME[v]||v}...`, 0.4);
+  let img;
+  try{ img = await loadBytes(pick.name, pick.hour, v); }
+  catch(e){ if(seq===drawSeq) status('Forecast image unavailable: '+e.message+'.'); return; }
+  if(seq!==drawSeq) return;   // the user moved on while this was loading
+  const canvas = colorize(img, v);
+  if(fieldOverlay) map.removeLayer(fieldOverlay);
+  fieldOverlay = new CanvasOverlay(canvas, m.bounds, {opacity:op, pane:'field', interactive:false}).addTo(map);
+  cur = {v, img, bounds:m.bounds, label:m.label};
+  dirImg = null; arrowLayer.clearLayers();
+  if(['w850','gust'].includes(v)){
+    try{ dirImg = await loadBytes(pick.name, pick.hour, 'd850'); }catch(e){}
+    if(seq===drawSeq) drawArrows();
+  }
+  const near = pick.hour!==key ? ` Nearest model hour: ${etLabel(pick.hour)} ET.` : '';
+  document.getElementById('status').innerHTML = `${dayLabel()} ${pad2(hour)}:00 ET.${near} <b>${esc(m.label)}</b>, run ${runText(m)}, ${srcText('cache', m.fetched)}. ${m.width} x ${m.height} pixels.`;
+  // fetch the neighbouring hours in the background so the slider feels instant
+  [-1,1].forEach(dh => { const k2 = etToUtcKey(dayKey(), hour+dh); if(m.hours.includes(k2)) loadBytes(pick.name, k2, v).catch(()=>{}); });
+}
+const VNAME = Object.fromEntries(MODEL_VARS);
+async function loadModelSites(live){
+  const lists = [];
+  for(const name of ['hrrr','gfs']){
+    const m = MI.models[name]; if(!m) continue;
+    try{ const r = await fetch(MI.base + m.sites, {cache:'no-cache'}); if(r.ok) lists.push([m, await r.json()]); }catch(e){}
+  }
+  if(!lists.length){ siteSrc = {state:'error', msg:'NOAA site forecast files missing'}; renderRank(); return; }
+  live.forEach(o => {
+    siteFc[o.id] = {};
+    // HRRR first; GFS fills the days HRRR does not cover
+    lists.forEach(([m, j]) => {
+      const s = j.sites[o.id]; if(!s) return;
+      const days = siteDays(o, s.hourly, `${m.label}, run ${runText(m)}`);
+      Object.entries(days).forEach(([d, f]) => { if(!siteFc[o.id][d]) siteFc[o.id][d] = f; });
+    });
+  });
+  const newest = lists.map(([m])=>m.fetched).sort()[0];
+  siteSrc = {state:'ok', src:'cache', fetched:newest, label:'NOAA HRRR, then GFS'};
+  renderRank();
+}
+async function initModels(){
+  const [j, base] = await cachedAt('models/index.json');
+  if(!j || !Object.keys(j.models||{}).length) return;
+  MI = {...j, base: base + 'models/'};   // paths in the index are relative to cache/models/
+  document.getElementById('fieldLegend').textContent = 'Forecast field (NOAA HRRR and GFS)';
+  document.getElementById('region').hidden = true;
+  document.getElementById('model').hidden = false;
+  const vs = document.getElementById('variable'), keep = vs.value;
+  vs.innerHTML = MODEL_VARS.map(([k,l]) => `<option value="${k}">${l}</option>`).join('');
+  if(MODEL_VARS.some(([k])=>k===keep)) vs.value = keep;
+  const hr = document.getElementById('hour'); hr.max = 21;
+}
 
 // ---------- per-site daily forecast ----------
 const siteFc = {};
@@ -462,6 +659,7 @@ let siteSrc = {state:'loading'};
 async function loadSites(){
   const live = OPS.filter(o=>o.rental!=='CLOSED');
   let pairs;
+  if(MI){ await loadModelSites(live); return; }
   const c = await cached('openmeteo/sites.json');
   if(c && c.sites){
     pairs = live.filter(o=>c.sites[o.id]).map(o=>[o,c.sites[o.id]]);
@@ -473,24 +671,32 @@ async function loadSites(){
     pairs = live.map((o,k)=>[o,res[k]]);
     siteSrc = {state:'ok', src:'live'};
   }
-  pairs.forEach(([o,r])=>{
-    const h=r.hourly, byDay={};
-    h.time.forEach((t,i)=>{
-      const hr=+t.slice(11,13); if(hr<11||hr>17) return;
-      const d=t.slice(0,10); (byDay[d] ||= []).push(i);
-    });
-    siteFc[o.id]={};
-    Object.entries(byDay).forEach(([d,ix])=>{
-      const mx=k=>Math.max(...ix.map(i=>h[k][i]??0)), mean=k=>ix.reduce((a,i)=>a+(h[k][i]??0),0)/ix.length;
-      const blh=mx('boundary_layer_height')*3.281, cb=Math.max(...ix.map(i=>(h.temperature_2m[i]-h.dew_point_2m[i])*400));
-      const w=mean('wind_speed_850hPa'), dd=circMean(ix.map(i=>h.wind_direction_850hPa[i]));
-      const th=thermalScore(blh,mean('cloud_cover_low'),mx('precipitation_probability'),mx('cape'));
-      let ridge=0; const rd=RIDGE[o.id];
-      if(rd){ const off=Math.abs(((dd-rd[0]+540)%360)-180); if(off<=rd[1] && w>=12 && w<=35) ridge = 10*(1-off/rd[1]*0.4)*Math.min(1,(w-8)/12) * (1-Math.min(1,Math.max(0,(mx('precipitation_probability')-30)/50))*0.8); }
-      siteFc[o.id][d]={blh,cb,w850:w,d850:dd,gust:mx('wind_gusts_10m'),pop:mx('precipitation_probability'),cape:mx('cape'),th,ridge,score:Math.max(th,ridge)};
-    });
-  });
+  pairs.forEach(([o,r])=>{ siteFc[o.id] = siteDays(o, r.hourly); });
   renderRank();
+}
+// Daily site forecast from hourly values, 11:00 to 17:00 local. Hourly keys follow Open-Meteo's names;
+// NOAA site files give a rain rate ("precipitation", mm/h) instead of a probability.
+function siteDays(o, h, label){
+  const byDay={}, out={}, rate = !h.precipitation_probability;
+  h.time.forEach((t,i)=>{
+    const hr=+t.slice(11,13); if(hr<11||hr>17) return;
+    const d=t.slice(0,10); (byDay[d] ||= []).push(i);
+  });
+  Object.entries(byDay).forEach(([d,ix])=>{
+    // whole 11:00 to 17:00 windows only: 7 hourly values, or 3 once GFS goes 3-hourly after day 5
+    const hourly = ix.length>1 && +h.time[ix[1]].slice(11,13) - +h.time[ix[0]].slice(11,13) === 1;
+    if(ix.length < (hourly ? 7 : 3)) return;
+    const mx=k=>Math.max(...ix.map(i=>h[k]?.[i]??0)), mean=k=>ix.reduce((a,i)=>a+(h[k]?.[i]??0),0)/ix.length;
+    const rain = rate ? mx('precipitation') : mx('precipitation_probability');
+    const blh=mx('boundary_layer_height')*3.281, cb=Math.max(...ix.map(i=>(h.temperature_2m[i]-h.dew_point_2m[i])*400));
+    const w=mean('wind_speed_850hPa'), dd=circMean(ix.map(i=>h.wind_direction_850hPa[i]));
+    const th=thermalScore(blh,mean('cloud_cover_low'),rain,mx('cape'),rate);
+    let ridge=0; const rd=RIDGE[o.id];
+    if(rd){ const off=Math.abs(((dd-rd[0]+540)%360)-180); if(off<=rd[1] && w>=12 && w<=35) ridge = 10*(1-off/rd[1]*0.4)*Math.min(1,(w-8)/12) * (1-rainCut(rain, rate)*0.8); }
+    out[d]={blh,cb,w850:w,d850:dd,gust:mx('wind_gusts_10m'),rain,rate,cape:mx('cape'),th,ridge,score:Math.max(th,ridge),
+            wstar: h.wstar ? mx('wstar')*196.85 : null, src: label||'GFS via Open-Meteo', hours: ix.length};
+  });
+  return out;
 }
 function circMean(a){const s=a.reduce((x,d)=>x+Math.sin(d*Math.PI/180),0),c=a.reduce((x,d)=>x+Math.cos(d*Math.PI/180),0);return (Math.atan2(s,c)*180/Math.PI+360)%360;}
 function renderRank(){
@@ -499,7 +705,7 @@ function renderRank(){
   const note = t => `<li class="small" style="display:block">${t}</li>`;
   if(siteSrc.state==='error'){ol.innerHTML=note(`Site forecasts unavailable: ${esc(siteSrc.msg)}.`);return;}
   if(!rows.length){ol.innerHTML=note(siteSrc.state==='loading'?'Loading site forecasts...':'No site forecast for this day.');return;}
-  ol.innerHTML = note(`GFS via Open-Meteo, ${srcText(siteSrc.src,siteSrc.fetched)}.`) + rows.map(({o,f})=>`<li data-id="${o.id}"><span class="score" style="background:${color(f.score,RANKSC)}">${f.score.toFixed(1)}</span><span>${esc(o.name)}<br><span class="small">${f.ridge>f.th?'ridge ':''}${ACCESS[o.access]} &middot; ${RENTAL[o.rental][0]}</span></span><span class="dot" style="background:var(${RENTAL[o.rental][1]})"></span></li>`).join('');
+  ol.innerHTML = note(`${siteSrc.label||'GFS via Open-Meteo'}, ${srcText(siteSrc.src,siteSrc.fetched)}.`) + rows.map(({o,f})=>`<li data-id="${o.id}"><span class="score" style="background:${color(f.score,RANKSC)}">${f.score.toFixed(1)}</span><span>${esc(o.name)}<br><span class="small">${f.ridge>f.th?'ridge ':''}${ACCESS[o.access]} &middot; ${RENTAL[o.rental][0]}</span></span><span class="dot" style="background:var(${RENTAL[o.rental][1]})"></span></li>`).join('');
 }
 document.getElementById('rank').addEventListener('click',e=>{const li=e.target.closest('li[data-id]'); if(!li) return; const o=OPS.find(x=>x.id===li.dataset.id); map.setView([o.lat,o.lon],9); showDetail(o.id);});
 
@@ -542,7 +748,8 @@ const _ds=drawSites; drawSites=function(){_ds(); renderGliders();};
 ['vanOnly','tallOnly'].forEach(id=>document.getElementById(id).addEventListener('change',renderGliders));
 rf.addEventListener('change',renderGliders);
 
-drawSites(); renderGliders(); drawField(); loadSites();
+drawSites(); renderGliders();
+initModels().finally(() => { drawField(); loadSites(); });
 </script>
 </body>
 </html>

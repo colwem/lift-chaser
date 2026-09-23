@@ -79,6 +79,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .pop .fc{background:var(--accent-2);border-radius:4px;padding:6px 8px;margin:6px 0;font-size:13px}
 .pop .links a{margin-right:8px;font-size:13px}
 .pop .proc{font-size:12.5px;max-height:90px;overflow:auto;color:#2c3a42}
+.readout{background:rgba(255,255,255,.92);padding:3px 8px;border-radius:4px;font-family:var(--mono);font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .wind-arrow{color:#16252f;font-size:15px;line-height:15px;text-shadow:0 0 3px #fff,0 0 3px #fff}
 @media (max-width:760px){#app{grid-template-columns:1fr;grid-template-rows:48% 52%}#side{order:2;border-right:0;border-top:1px solid var(--line)}}
 </style>
@@ -91,7 +92,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
   <div class="small mono" id="build"></div>
 
   <fieldset>
-    <legend>Forecast field (GFS via Open-Meteo)</legend>
+    <legend id="fieldLegend">Forecast field (GFS via Open-Meteo)</legend>
     <select id="variable" aria-label="Forecast variable">
       <option value="score">Soaring index (heuristic, 0 to 10)</option>
       <option value="blh">Boundary layer height (thermal depth), ft AGL</option>
@@ -110,6 +111,11 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
         <option value="ne">Northeast (0.5 deg)</option>
         <option value="east">Eastern US (1 deg)</option>
         <option value="conus">Whole US (1.5 deg)</option>
+      </select>
+      <select id="model" aria-label="Forecast model" hidden>
+        <option value="auto">Best available: HRRR, then GFS</option>
+        <option value="hrrr">HRRR 3 km (days 1 to 2)</option>
+        <option value="gfs">GFS 25 km (days 1 to 7)</option>
       </select>
     </div>
     <div class="row" style="margin-top:8px">
@@ -166,7 +172,7 @@ const OPS = [{"id": "GBSC", "name": "Greater Boston Soaring Club (home club)", "
 const FLEET = [["GBSC", "Schleicher ASK-21", "N421GB", 2, "$25/h members", "Members", "Did not fit you", "ASK-21"], ["GBSC", "Schleicher ASK-21", "N721RC", 2, "$25/h members", "Members", "Did not fit you", "ASK-21"], ["GBSC", "Schweizer 2-33A", "N1225S", 2, "$14/h members", "Members", "Roomy", "2-33"], ["GBSC", "LET L-23 Super Blanik", "", 2, "$14/h members", "Members", "Roomy; sit-test", "L-23"], ["GBSC", "Schleicher ASW-19B", "", 1, "$20/h, 2 h limit", "Members", "Tight above ~6'2\"", "ASW-19"], ["GBSC", "LET L-33 Solo", "", 1, "$10/h, 2 h limit", "Members", "Probably OK", "L-33"], ["GBSC", "Schweizer 1-34", "N1156S", 1, "$10/h", "Members", "Generally good", "1-34"], ["GBSC", "Schweizer 1-26E", "N33917", 1, "$10/h", "Members", "Small", "1-26"], ["SUGAR", "PZL PW-6U", "N16VT", 2, "$169/h non-member; $50 member", "Yes", "Front seat fairly roomy", "PW-6"], ["SUGAR", "PZL PW-6U", "N777VT", 2, "$169/h non-member; $50 member", "Yes", "Front seat fairly roomy", "PW-6"], ["SUGAR", "Schweizer 2-33", "N2743H", 2, "$85/h non-member; $40 member", "Yes", "Roomy", "2-33"], ["SUGAR", "Schweizer 2-33", "", 2, "$85/h non-member; $40 member", "Yes", "Roomy", "2-33"], ["SUGAR", "Schweizer 1-26E", "N1107S", 1, "$79/h non-member; $40 member", "Yes", "Small", "1-26"], ["MOHAWK", "LET L-13 Blanik", "N336MS", 2, "", "Members", "Roomy", "L-13"], ["MOHAWK", "Schweizer 2-33A", "N1186S", 2, "", "Members", "Roomy", "2-33"], ["MOHAWK", "Schweizer 2-33A", "N2039T", 2, "", "Members", "Roomy", "2-33"], ["MOHAWK", "Schweizer 2-22E", "N2729Z", 2, "", "Members", "Small; may be inactive", "2-22"], ["MOHAWK", "Schweizer 1-26E", "N65947", 1, "", "Members", "Small", "1-26"], ["MOHAWK", "Schweizer 1-23H-15", "N10388", 1, "", "Members", "Small; may be inactive", "1-23"], ["POSTMILLS", "Schweizer 2-33A", "N17967", 2, "In dues", "Members", "Roomy", "2-33"], ["POSTMILLS", "LET L-23 Super Blanik", "N303BA", 2, "In dues", "Members", "Roomy", "L-23"], ["POSTMILLS", "Schweizer 1-26E", "N1115S", 1, "In dues", "Members", "Small", "1-26"], ["POSTMILLS", "HpH 304C", "N304PM", 1, "In dues", "Members", "Unverified", "HPH304"], ["NESA", "Schweizer 2-33", "N2041T", 2, "$10/flight", "Members", "", "2-33"], ["NESA", "Schweizer 2-33A", "N1242S", 2, "$10/flight", "Members", "", "2-33"], ["NESA", "Schweizer 1-34", "N7660", 1, "$10/flight", "Members", "", "1-34"], ["NESA", "Schweizer 1-26E", "N65948", 1, "$10/flight", "Members", "Small", "1-26"], ["FRANCONIA", "Grob G103 Twin Astir", "N103GV", 2, "", "Members?", "Large cockpit; best bet", "G103"], ["FRANCONIA", "LET L-23 Super Blanik", "N118BB", 2, "", "Members?", "Roomy", "L-23"], ["FRANCONIA", "Schweizer 2-33A", "N33968", 2, "", "Members?", "Roomy", "2-33"], ["FRANCONIA", "Schweizer 2-33A", "N7776S", 2, "", "Members?", "Roomy", "2-33"], ["FRANCONIA", "Schweizer 1-26", "N2775Z", 1, "", "Members?", "Small", "1-26"], ["FRANCONIA", "Schweizer 1-26E", "N606GF", 1, "", "Members?", "Small", "1-26"], ["FRANCONIA", "Pilatus B4", "N76PS", 1, "", "Members?", "Smallish", "B4"], ["CSA", "Schweizer 2-33A", "N2930H", 2, "", "Members", "", "2-33"], ["CSA", "Schweizer 2-33A", "N1228S", 2, "", "Members", "", "2-33"], ["CSA", "Schweizer 1-26E", "N2517H", 1, "", "Members", "Small", "1-26"], ["CSA", "Schweizer 1-34", "N1164S", 1, "", "Members", "", "1-34"], ["WURTS", "Grob G103A Twin II", "", 2, "$75/h", "Yes", "Depends on proportions", "G103"], ["WURTS", "Schweizer 2-33A", "N2656H", 2, "$67/h", "Yes", "Roomy", "2-33"], ["WURTS", "Schweizer 2-33A", "N65828", 2, "$67/h", "Yes", "Roomy", "2-33"], ["WURTS", "Schweizer 1-26E", "N33898", 1, "$55/h", "Yes", "Little headroom", "1-26"], ["ACA", "Grob G103 Twin Astir", "N103GT", 2, "Tows only", "Members", "Depends on proportions", "G103"], ["ACA", "Rolladen-Schneider LS-4A", "N3YA", 1, "Tows only", "Members", "Roomy", "LS-4"], ["ACA", "Pilatus B4", "N21TU", 1, "Tows only", "Members", "", "B4"], ["ACA", "Schweizer 1-34", "N134TM", 1, "Tows only", "Members", "", "1-34"], ["ACA", "Schweizer 1-26 (x4)", "N1118S, N17950, N2994H, N2767R", 1, "Tows only", "Members", "Little headroom", "1-26"], ["ACA", "Schweizer 2-33A", "N17867", 2, "Tows only", "Members", "Roomy", "2-33"], ["ACA", "Schweizer 2-33A", "N65804", 2, "Tows only", "Members", "Roomy", "2-33"], ["ACA", "IS-28B2 Lark", "N350BB", 2, "Tows only", "Members", "", "IS28"], ["JRS", "Grob G103 Twin II", "N18AG", 2, "", "Call", "Depends on proportions", "G103"], ["JRS", "Schweizer 2-33A (x3)", "N17879, N33983, N65976", 2, "", "Call", "Roomy", "2-33"], ["JRS", "Schweizer 2-32", "N5772S", 3, "", "Call", "Roomy", "2-32"], ["JRS", "Schweizer 1-26E", "N17933", 1, "", "Call", "Little headroom", "1-26"], ["ASA", "Grob G102 Astir CS", "N5054", 1, "Tows only", "Long-distance members", "Roomiest here", "G102"], ["ASA", "Grob G103 Twin II", "N575AS", 2, "Tows only", "Long-distance members", "Depends on proportions", "G103"], ["ASA", "Grob G103 Twin II", "N898AS", 2, "Tows only", "Long-distance members", "Depends on proportions", "G103"], ["ASA", "Grob G103C Twin III", "N996T", 2, "Tows only", "Long-distance members", "", "G103C"], ["HHSC", "Schleicher ASK-21 (x3)", "N521HH, N621HH, N91HH", 2, "$50/h guest", "Guest", "Does not fit you", "ASK-21"], ["HHSC", "Schempp-Hirth Duo Discus", "N60BP", 2, "$50/h guest", "Guest", "Front seat reputedly roomy", "DUO"], ["HHSC", "Schempp-Hirth Discus CS", "N189HH", 1, "$50/h guest", "Guest", "", "DISCUS"], ["HHSC", "Schweizer 1-34", "N7654", 1, "", "Guest", "", "1-34"], ["HHSC", "Schweizer 1-35C", "N3620E", 1, "", "Guest", "", "1-35"], ["HHSC", "Schweizer 1-26E (x2)", "N2768H, N33874", 1, "", "Guest", "Little headroom", "1-26"], ["HHSC", "Schweizer 2-33A (x3)", "N17903, N65833, N65839", 2, "$50/h guest", "Guest", "Roomy", "2-33"], ["FLSC", "Schleicher ASK-21", "N574KS", 2, "", "Members", "", "ASK-21"], ["FLSC", "Grob G102 Astir CS", "N20737", 1, "", "Members", "Roomy", "G102"], ["FLSC", "Centrair Pegasus 101B", "N70FP", 1, "", "Members", "", "PEGASUS"], ["FLSC", "Schweizer 1-26A", "N3822A", 1, "", "Members", "15 flights in type required", "1-26"], ["FLSC", "Schweizer 2-33A", "N234WE", 2, "", "Members", "Roomy", "2-33"], ["VSC", "Schleicher ASK-21", "N474KS", 2, "", "Members", "", "ASK-21"], ["VSC", "Schweizer 2-33 (x3)", "N2463W, N5787S, N7686", 2, "", "Members", "Roomy", "2-33"], ["VSC", "Schweizer 1-34", "N1172S", 1, "", "Members", "", "1-34"], ["VSC", "Schweizer 1-26E", "N17924", 1, "", "Members", "", "1-26"], ["LISA", "Schweizer 2-33A (x3)", "N17956, N2055T, N65918", 2, "", "Members", "Roomy", "2-33"], ["LISA", "Schweizer 1-34", "N7635", 1, "", "Members", "", "1-34"], ["LISA", "Schweizer 1-26E", "N17917", 1, "", "Members", "", "1-26"], ["VANSANT", "Schweizer 2-33", "", 2, "$80/h + tow", "Yes", "Roomy", "2-33"], ["VANSANT", "Schweizer 2-32", "", 3, "$80/h + tow", "Yes", "Roomy", "2-32"], ["TIGERS", "Schweizer 2-33A", "N65867", 2, "Tows only", "Members", "", "2-33"], ["TIGERS", "Schweizer 1-26B", "N389BR", 1, "Tows only", "Members", "", "1-26"], ["TIGERS", "Schweizer 1-34", "N76JP", 1, "Tows only", "Members", "", "1-34"], ["PGC", "Grob G103 family (x5)", "N139BG, N5QD, N924BG, N487GC, N5361V", 2, "Tows only", "Members", "Depends on proportions", "G103"], ["PGC", "Grob G102 / Astir CS-77", "N131SS, N1006P", 1, "Tows only", "Members", "Roomy", "G102"], ["PGC", "Schempp-Hirth Duo Discus", "N90BP", 2, "Tows only", "Members", "", "DUO"], ["PGC", "Schweizer 2-22", "N91834", 2, "Tows only", "Members", "", "2-22"], ["BSA", "Schleicher ASK-21", "N214BS", 2, "", "Members", "Does not fit you", "ASK-21"], ["BSA", "LET L-23 Super Blanik", "N316BA", 2, "", "Members", "Roomy", "L-23"], ["BSA", "Grob G103 Twin Astir", "N906BG", 2, "", "Members", "", "G103"], ["BSA", "Schweizer 1-26E (x2)", "N1106S, N8642", 1, "", "Members", "", "1-26"], ["PSA", "Grob G103", "N103X", 2, "$10/h", "Temp member", "Depends on proportions", "G103"], ["PSA", "Grob G102", "N412SS / N142SS", 1, "$10/h", "Temp member (rated)", "Roomy", "G102"], ["PSA", "LET L-23 Super Blanik", "N916B", 2, "$10/h", "Temp member", "Roomy", "L-23"], ["MASA", "Schleicher ASK-21", "N899MA", 2, "", "Members", "Does not fit you", "ASK-21"], ["MASA", "Schleicher ASK-21 (hand rudder)", "N899SA", 2, "", "Members", "Does not fit you", "ASK-21"], ["MASA", "Schweizer 2-33A", "N7782S", 2, "", "Members", "Roomy", "2-33"], ["MASA", "Grob G102 Club Astir IIIB", "N936BG", 1, "", "Members", "", "G102"], ["MASA", "Rolladen-Schneider LS-4", "N30RD", 1, "", "Members", "", "LS-4"], ["SKYLINE", "Schleicher ASK-21 (x2)", "", 2, "$39/h", "Visiting member", "Does not fit you", "ASK-21"], ["SKYLINE", "Schempp-Hirth Discus CS (x2)", "", 1, "$36/h (3 h cap)", "Visiting member", "Medium; sit-test", "DISCUS"], ["SKYLINE", "PZL PW-5", "", 1, "$24/h", "Visiting member", "Small", "PW-5"], ["ESC", "Schleicher ASK-13", "", 2, "$55/h", "Closed 2026", "Roomy", "ASK-13"], ["SVS", "Schleicher ASK-21", "N747SV", 2, "", "Intro member", "", "ASK-21"], ["SVS", "IS-28B2 Lark", "", 2, "", "Intro member", "", "IS28"], ["BRSS", "Schleicher ASK-21 (x2)", "", 2, "", "Guest member", "Does not fit you", "ASK-21"], ["BRSS", "Rolladen-Schneider LS-4 (x2)", "", 1, "", "Guest member", "", "LS-4"], ["BHS", "Schweizer 2-33 (x3)", "", 2, "", "Call", "Roomy", "2-33"], ["BHS", "Schempp-Hirth Duo Discus", "", 2, "", "Call", "Roomy front", "DUO"], ["BHS", "Schweizer 1-26A (x3)", "", 1, "", "Call", "Small", "1-26"], ["CAROLINA", "Grob G103 Acro", "", 2, "$0/h", "Members", "Roomy", "G103"], ["CAROLINA", "Grob G102 Standard Astir", "", 1, "$0/h", "Members", "", "G102"], ["MGSA", "Schleicher ASK-21 (x2)", "", 2, "", "Members", "Does not fit you", "ASK-21"], ["MGSA", "Schempp-Hirth Discus CS", "", 1, "", "Members", "", "DISCUS"], ["MGSA", "Grob G102", "", 1, "", "Members", "", "G102"], ["CHIL", "Schweizer 2-33A", "", 2, "$48/h", "Yes", "Best tall-pilot bet", "2-33"], ["CHIL", "PZL PW-6U", "", 2, "$72/h", "Yes", "Fairly roomy", "PW-6"], ["CHIL", "Schweizer 1-26E", "", 1, "$40/h", "Yes", "Tight above ~6'2\"", "1-26"], ["CHIL", "PZL PW-5", "", 1, "$48/h", "Yes", "Small", "PW-5"], ["CHIL", "Schweizer 2-32", "", 2, "$72/h", "Dual only", "Very roomy", "2-32"], ["EAGLEVILLE", "Schleicher ASK-21", "N121FL", 2, "", "Members", "Does not fit you", "ASK-21"], ["EAGLEVILLE", "Schleicher ASK-21", "N2237W", 2, "", "Members", "Does not fit you", "ASK-21"], ["EAGLEVILLE", "Rolladen-Schneider LS-4", "N68RM", 1, "", "Members", "", "LS-4"], ["SKYSOAR", "Schweizer 2-33A", "", 2, "Free to members", "Members", "Roomy", "2-33"], ["SKYSOAR", "SZD-50 Puchacz (KR-03)", "", 2, "Free to members", "Members", "Roomy", "PUCHACZ"], ["SKYSOAR", "PZL PW-5", "", 1, "Free to members", "Members", "", "PW-5"], ["SKYSOAR", "Schweizer 1-34R", "", 1, "Free to members", "Members", "", "1-34"], ["CGC", "Schleicher ASK-21 (x2)", "", 2, "$36-40/h", "Members", "Does not fit you", "ASK-21"], ["CGC", "Schempp-Hirth Duo Discus", "", 2, "$36-40/h", "Members", "Roomy front", "DUO"], ["CGC", "Schempp-Hirth Discus CS", "", 1, "$36-40/h", "Members", "", "DISCUS"], ["CCSC", "Schleicher ASK-21 (x3)", "", 2, "", "Members", "Does not fit you", "ASK-21"], ["CCSC", "Schweizer 2-33 (x2)", "", 2, "", "Members", "Roomy", "2-33"], ["CCSC", "Schweizer 1-26E (x2)", "", 1, "", "Members", "", "1-26"], ["CCSC", "Grob G102 Std Astir III", "", 1, "", "Members", "", "G102"], ["SANDHILL", "Glaser-Dirks DG-505 Orion", "", 2, "", "Guest member", "Good", "DG505"], ["SANDHILL", "Grob G103 Twin II / Acro II", "", 2, "", "Guest member", "Good", "G103"], ["SANDHILL", "Schweizer 2-33", "", 2, "", "Guest member", "Roomy", "2-33"], ["SANDHILL", "Schempp-Hirth Discus-2cT", "", 1, "", "Guest member", "", "DISCUS2"], ["SANDHILL", "Schempp-Hirth Open Cirrus", "", 1, "", "Guest member", "", "CIRRUS"], ["SEMINOLE", "Grob G103 Twin", "", 2, "$125/h", "Yes (with insurance)", "Good", "G103"], ["SEMINOLE", "LET L-23 Super Blanik", "", 2, "$120/h", "Yes (with insurance)", "Very roomy", "L-23"], ["TBSS", "Grob G103 Twin Astir (x3)", "", 2, "Free to members", "Members", "", "G103"], ["TBSS", "LET L-23 Blanik (x2)", "", 2, "Free to members", "Members", "Roomy", "L-23"], ["TBSS", "Schweizer 1-36", "", 1, "", "Members", "", "1-36"], ["TBSS", "Grob G102", "", 1, "", "Members", "", "G102"], ["TBSS", "Rolladen-Schneider LS-4", "", 1, "", "Members", "Silver badge required", "LS-4"], ["MIAMI", "LET L-23 Blanik", "", 2, "$90/h", "Yes (call)", "Roomy", "L-23"], ["MIAMI", "Schweizer 2-32", "", 2, "$90/h", "Yes (call)", "Roomy", "2-32"], ["MIAMI", "Pilatus B-4", "", 1, "$75/h", "Yes (call)", "", "B4"], ["TSA", "Schleicher ASK-21 (x3)", "", 2, "", "Visiting member", "Does not fit you", "ASK-21"], ["TSA", "Schempp-Hirth Duo Discus", "", 2, "", "Visiting member", "Front tight above ~6'3\"", "DUO"], ["TSA", "PZL PW-5 (x3)", "", 1, "", "Visiting member", "Small", "PW-5"], ["TSA", "Schweizer 1-26 (x2)", "", 1, "", "Visiting member", "Small", "1-26"], ["SCH", "Schweizer 2-33", "", 2, "$0.20/min", "Guest member?", "Roomy", "2-33"], ["SCH", "LET L-23 / L-33", "", 2, "$0.40/min", "Guest member?", "Roomy", "L-23"], ["SCH", "Schleicher ASK-21", "", 2, "$0.60/min", "Guest member?", "Does not fit you", "ASK-21"], ["FLF", "Schweizer 2-33 (x2)", "", 2, "$0.25/min", "Members", "Roomy", "2-33"], ["FLF", "Grob G103 Twin Astir", "", 2, "$0.30/min", "Members", "", "G103"], ["FLF", "Schweizer 1-26 (x2)", "", 1, "$0.25/min", "Members", "", "1-26"], ["FLF", "Schweizer 1-36", "", 1, "$0.25/min", "Members", "", "1-36"], ["SSB", "Glaser-Dirks DG-505", "N505PB", 2, "$16/flight + $16/h", "Limited member", "Best chance here", "DG505"], ["SSB", "Schleicher ASK-21", "N421EF", 2, "$16/flight + $16/h", "Limited member", "Does not fit you", "ASK-21"], ["SSB", "Schempp-Hirth Discus CS", "N23SG", 1, "$16/flight + $16/h", "Limited member", "Moderate", "DISCUS"], ["SSB", "Schempp-Hirth Discus CS", "N42CA", 1, "$16/flight + $16/h", "Limited member", "Moderate", "DISCUS"], ["AZS", "Schweizer 1-26E", "", 1, "$40/h (ins. $15k)", "Yes", "Cramped", "1-26"], ["AZS", "Schweizer 1-36", "", 1, "$45/h (ins. $15k)", "Yes", "Moderate", "1-36"], ["AZS", "Schweizer 2-33A", "", 2, "$60/h (ins. $15k)", "Yes", "Roomy", "2-33"], ["AZS", "PZL PW-5", "", 1, "$50/h (ins. $25k)", "Yes", "Small", "PW-5"], ["AZS", "Genesis 2", "", 1, "$70/h (ins. $40k)", "Yes", "Moderate", "GENESIS"], ["AZS", "Grob G103A", "", 2, "$75/h (ins. $60k)", "Yes", "Good; 240 lb limit", "G103"], ["AZS", "Schleicher ASK-21", "", 2, "$110/h (ins. $100k)", "Yes", "Does not fit you", "ASK-21"], ["AZS", "MDM-1 Swift (aerobatic)", "", 1, "$160/flight", "Yes", "Aerobatic", "SWIFT"], ["LVVSA", "Schweizer 2-33A", "", 2, "", "Members", "Roomy", "2-33"], ["LVVSA", "LET L-23 Blanik", "", 2, "", "Members", "Roomy", "L-23"], ["LVVSA", "Schweizer 1-26D", "", 1, "", "Members", "", "1-26"], ["LVVSA", "Schweizer 2-32 (lease-back)", "", 3, "", "Members", "Roomy", "2-32"], ["USA", "Grob G103 Twin Astir (x3)", "N7813, N80PX, N8485W", 2, "", "Members", "Workable", "G103"], ["USA", "Grob G103 Twin II (x2)", "N228BG, N4446Y", 2, "", "Members", "Workable", "G103"], ["USA", "Pilatus B4-PC11", "", 1, "", "Members", "", "B4"]];
 const TYPES = {"2-33": {"name": "Schweizer SGS 2-33A", "cls": "Trainer (metal)", "seats": 2, "span": 15.5, "ld": 23, "v_ld": 72, "sink": 0.94, "vne": 158, "cockpit": "Roomy", "approx": false}, "2-32": {"name": "Schweizer SGS 2-32", "cls": "Two-seat (metal)", "seats": 3, "span": 17.4, "ld": 34, "v_ld": 95, "sink": 0.73, "vne": 254, "cockpit": "Roomy", "approx": false}, "2-22": {"name": "Schweizer SGU 2-22", "cls": "Trainer (vintage)", "seats": 2, "span": 13.4, "ld": 17, "v_ld": 77, "sink": 1.0, "vne": 116, "cockpit": "Tight", "approx": true}, "1-26": {"name": "Schweizer SGS 1-26", "cls": "One-design (metal)", "seats": 1, "span": 12.2, "ld": 23, "v_ld": 85, "sink": 0.82, "vne": 183, "cockpit": "Tight headroom", "approx": false}, "1-34": {"name": "Schweizer SGS 1-34", "cls": "Standard (metal)", "seats": 1, "span": 15.0, "ld": 34, "v_ld": 85, "sink": 0.67, "vne": 212, "cockpit": "OK", "approx": false}, "1-35": {"name": "Schweizer SGS 1-35", "cls": "15 m (metal)", "seats": 1, "span": 15.0, "ld": 38, "v_ld": 97, "sink": 0.61, "vne": 241, "cockpit": "Reclined, check", "approx": true}, "1-36": {"name": "Schweizer SGS 1-36 Sprite", "cls": "Sport (metal)", "seats": 1, "span": 14.1, "ld": 31, "v_ld": 85, "sink": 0.67, "vne": 194, "cockpit": "OK", "approx": true}, "1-23": {"name": "Schweizer SGS 1-23", "cls": "Standard (vintage metal)", "seats": 1, "span": 15.2, "ld": 29, "v_ld": 80, "sink": 0.7, "vne": 225, "cockpit": "Unknown", "approx": true}, "L-23": {"name": "LET L-23 Super Blanik", "cls": "Trainer (metal)", "seats": 2, "span": 16.2, "ld": 28, "v_ld": 90, "sink": 0.75, "vne": 250, "cockpit": "Roomy", "approx": false}, "L-13": {"name": "LET L-13 Blanik", "cls": "Trainer (metal)", "seats": 2, "span": 16.2, "ld": 28, "v_ld": 85, "sink": 0.82, "vne": 253, "cockpit": "Roomy", "approx": false}, "L-33": {"name": "LET L-33 Solo", "cls": "Club (metal)", "seats": 1, "span": 14.1, "ld": 34, "v_ld": 85, "sink": 0.66, "vne": 250, "cockpit": "OK", "approx": true}, "ASK-21": {"name": "Schleicher ASK-21", "cls": "Two-seat trainer (GRP)", "seats": 2, "span": 17.0, "ld": 34, "v_ld": 90, "sink": 0.65, "vne": 280, "cockpit": "Tight for very tall (did not fit Martin)", "approx": false}, "ASK-13": {"name": "Schleicher ASK-13", "cls": "Trainer (wood/tube)", "seats": 2, "span": 16.0, "ld": 28, "v_ld": 90, "sink": 0.81, "vne": 200, "cockpit": "Roomy", "approx": false}, "ASW-19": {"name": "Schleicher ASW-19B", "cls": "Standard (GRP)", "seats": 1, "span": 15.0, "ld": 38.5, "v_ld": 100, "sink": 0.6, "vne": 255, "cockpit": "Tight above ~6'2\"", "approx": false}, "PW-6": {"name": "PZL PW-6U", "cls": "Two-seat trainer (GRP)", "seats": 2, "span": 16.0, "ld": 34, "v_ld": 95, "sink": 0.74, "vne": 260, "cockpit": "Fairly roomy front", "approx": true}, "PW-5": {"name": "PZL PW-5 Smyk", "cls": "World Class (GRP)", "seats": 1, "span": 13.44, "ld": 33, "v_ld": 80, "sink": 0.64, "vne": 220, "cockpit": "Small", "approx": false}, "G103": {"name": "Grob G103 Twin Astir / Twin II", "cls": "Two-seat (GRP)", "seats": 2, "span": 17.5, "ld": 36.5, "v_ld": 105, "sink": 0.62, "vne": 250, "cockpit": "Good, depends on proportions", "approx": false}, "G103C": {"name": "Grob G103C Twin III", "cls": "Two-seat (GRP)", "seats": 2, "span": 18.0, "ld": 38, "v_ld": 105, "sink": 0.6, "vne": 260, "cockpit": "Good, depends on proportions", "approx": true}, "G102": {"name": "Grob G102 Astir (CS / Club / Std III)", "cls": "Club/Standard (GRP)", "seats": 1, "span": 15.0, "ld": 37, "v_ld": 95, "sink": 0.62, "vne": 250, "cockpit": "Roomy", "approx": true}, "B4": {"name": "Pilatus B4-PC11", "cls": "Club (metal, aerobatic)", "seats": 1, "span": 15.0, "ld": 35, "v_ld": 85, "sink": 0.64, "vne": 240, "cockpit": "Smallish", "approx": false}, "LS-4": {"name": "Rolladen-Schneider LS-4", "cls": "Standard (GRP)", "seats": 1, "span": 15.0, "ld": 40.5, "v_ld": 100, "sink": 0.6, "vne": 270, "cockpit": "Roomy", "approx": false}, "LS-3": {"name": "Rolladen-Schneider LS-3", "cls": "15 m (GRP)", "seats": 1, "span": 15.0, "ld": 40, "v_ld": 100, "sink": 0.6, "vne": 270, "cockpit": "OK", "approx": true}, "LS-6": {"name": "Rolladen-Schneider LS-6", "cls": "15 m (GRP)", "seats": 1, "span": 15.0, "ld": 42.5, "v_ld": 105, "sink": 0.58, "vne": 270, "cockpit": "OK", "approx": true}, "DISCUS": {"name": "Schempp-Hirth Discus CS", "cls": "Standard (GRP)", "seats": 1, "span": 15.0, "ld": 42, "v_ld": 100, "sink": 0.59, "vne": 250, "cockpit": "Medium", "approx": false}, "DUO": {"name": "Schempp-Hirth Duo Discus", "cls": "Two-seat 20 m (GRP)", "seats": 2, "span": 20.0, "ld": 45, "v_ld": 100, "sink": 0.55, "vne": 250, "cockpit": "Front seat reputedly roomy", "approx": false}, "DISCUS2": {"name": "Schempp-Hirth Discus-2cT", "cls": "18 m (GRP, turbo)", "seats": 1, "span": 18.0, "ld": 47, "v_ld": 105, "sink": 0.54, "vne": 280, "cockpit": "Medium", "approx": true}, "DG505": {"name": "Glaser-Dirks DG-505 Orion", "cls": "Two-seat 18/20 m (GRP)", "seats": 2, "span": 20.0, "ld": 44, "v_ld": 105, "sink": 0.56, "vne": 270, "cockpit": "Good", "approx": true}, "HPH304": {"name": "HpH 304C Wasp", "cls": "15 m (GRP)", "seats": 1, "span": 15.0, "ld": 43, "v_ld": 105, "sink": 0.58, "vne": 270, "cockpit": "Unknown", "approx": true}, "IS28": {"name": "IAR IS-28B2 Lark", "cls": "Two-seat (metal)", "seats": 2, "span": 17.0, "ld": 34, "v_ld": 90, "sink": 0.7, "vne": 210, "cockpit": "Unknown", "approx": true}, "PEGASUS": {"name": "Centrair Pegasus 101", "cls": "Standard (GRP)", "seats": 1, "span": 15.0, "ld": 41, "v_ld": 100, "sink": 0.6, "vne": 250, "cockpit": "Unknown", "approx": true}, "GENESIS": {"name": "Genesis 2", "cls": "Standard (composite)", "seats": 1, "span": 15.0, "ld": 42, "v_ld": 100, "sink": 0.58, "vne": 275, "cockpit": "Moderate", "approx": true}, "SWIFT": {"name": "Swift S-1 / MDM aerobatic", "cls": "Aerobatic", "seats": 1, "span": 12.7, "ld": 29, "v_ld": 95, "sink": 0.75, "vne": 290, "cockpit": "Unknown", "approx": true}, "PUCHACZ": {"name": "SZD-50 Puchacz", "cls": "Two-seat trainer (GRP)", "seats": 2, "span": 16.67, "ld": 30, "v_ld": 85, "sink": 0.7, "vne": 215, "cockpit": "Roomy", "approx": true}, "CIRRUS": {"name": "Schempp-Hirth Open Cirrus", "cls": "Open (GRP, vintage)", "seats": 1, "span": 17.7, "ld": 44, "v_ld": 95, "sink": 0.55, "vne": 220, "cockpit": "Unknown", "approx": true}};
 const RASP = {"GBSC": "https://www.soargbsc.net/rasp/", "SUGAR": "https://www.soargbsc.net/rasp/", "MOHAWK": "https://www.soargbsc.net/rasp/", "POSTMILLS": "https://www.soargbsc.net/rasp/", "NESA": "https://www.soargbsc.net/rasp/", "FRANCONIA": "https://www.soargbsc.net/rasp/", "CSA": "https://www.soargbsc.net/rasp/", "GORHAM": "https://www.soargbsc.net/rasp/", "SANFORD": "https://www.soargbsc.net/rasp/", "SPIRIT": "https://www.soargbsc.net/rasp/", "ASA": "https://www.soargbsc.net/rasp/"};
-const BUILD = {"sha": "88d6ae9 + local changes", "time": "2026-09-23 15:43 UTC"};
+const BUILD = {"sha": "1de3a0e + local changes", "time": "2026-09-23 17:40 UTC"};
 document.getElementById('build').textContent = `Build ${BUILD.sha}, ${BUILD.time}`;
 const RENTAL = {RENT:["Rents to visitors","--rent"],GUEST:["Guest / short-term membership","--guest"],JOIN:["Membership required","--join"],UNK:["Unknown, call","--unk"],CLOSED:["Closed / inactive","--closed"]};
 const ACCESS = {VAN:"Van, 4 h or less",VANEDGE:"Van, about 4 h",FLY:"Fly Friday night",FAR:"Out of range"};
@@ -249,7 +255,7 @@ function popup(o){
   const fl = (fleetBy[o.id]||[]).map(f=>`<tr><td>${esc(f[1])}</td><td class="mono">${esc(f[2]||'')}</td><td>${esc(f[4])}</td><td>${esc(f[5])}</td></tr>`).join('');
   const fc = siteFc[o.id]?.[dayKey()];
   const fcHtml = fc ? `<div class="fc"><b>${dayLabel()}</b>, 11:00 to 17:00 local: index <b>${fc.score.toFixed(1)}</b> (thermal ${fc.th.toFixed(1)}${RIDGE[o.id]?`, ridge ${fc.ridge.toFixed(1)}`:''})<br>
-    BL max ${fmt(fc.blh)} ft AGL, cu base ~${fmt(fc.cb)} ft AGL, 850 hPa ${Math.round(fc.w850)} kt from ${Math.round(fc.d850)}&deg;, gusts ${Math.round(fc.gust)} kt, rain ${Math.round(fc.pop)}%, CAPE ${Math.round(fc.cape)}</div>` : `<div class="fc small">Site forecast loading or unavailable.</div>`;
+    ${fc.wstar!=null?`W* max ${Math.round(fc.wstar)} fpm, `:''}BL max ${fmt(fc.blh)} ft AGL, cu base ~${fmt(fc.cb)} ft AGL, 850 hPa ${Math.round(fc.w850)} kt from ${Math.round(fc.d850)}&deg;, gusts ${Math.round(fc.gust)} kt, rain ${fc.rate?`max ${fc.rain.toFixed(1)} mm/h`:Math.round(fc.rain)+'%'}, CAPE ${Math.round(fc.cape)}<br><span class="small">${esc(fc.src)}</span></div>` : `<div class="fc small">Site forecast loading or unavailable.</div>`;
   const lk = `https://www.windy.com/?${o.lat},${o.lon},9`;
   return `<div class="pop"><h3>${esc(o.name)}</h3>
   <div class="meta">${esc(o.kind)} &middot; ${esc(o.airport)} &middot; ${esc(o.city)}</div>
@@ -349,12 +355,13 @@ function fetchPoints(pts, tz, msg=status){
 // in local dev the page is served from /site/ and cache/ is one level up. Opened from disk, both fail
 // and the page falls back to fetching Open-Meteo live.
 const STALE_H = 12;
-async function cached(path){
+async function cachedAt(path){
   for(const base of ['cache/','../cache/']){
-    try{ const r=await fetch(base+path,{cache:'no-cache'}); if(r.ok) return await r.json(); }catch(e){}
+    try{ const r=await fetch(base+path,{cache:'no-cache'}); if(r.ok) return [await r.json(), base]; }catch(e){}
   }
-  return null;
+  return [null, null];
 }
+async function cached(path){ return (await cachedAt(path))[0]; }
 function srcText(src, fetched){
   if(src!=='cache') return 'fetched live just now';
   const h=(Date.now()-Date.parse(fetched))/36e5;
@@ -393,16 +400,23 @@ function val(h, i, v){
     case 'score': return thermalScore(g('boundary_layer_height')*3.281,g('cloud_cover_low'),g('precipitation_probability'),g('cape'));
   }
 }
-function thermalScore(blhFt, low, pop, cape){
+// rain is a probability in % (Open-Meteo) or, with rate=true, a model rain rate in mm/h (NOAA).
+// Same formula as thermal_score() in scripts/fetch_models.py.
+const rainCut = (rain, rate) => Math.min(1,Math.max(0, rate ? (rain-0.1)/1.0 : (rain-20)/60));
+function thermalScore(blhFt, low, rain, cape, rate=false){
   let s = Math.max(0,Math.min(1,(blhFt-1500)/5000))*10;
   s *= 1 - Math.min(1,Math.max(0,(low-30)/60))*0.7;
-  s *= 1 - Math.min(1,Math.max(0,(pop-20)/60))*0.8;
+  s *= 1 - rainCut(rain, rate)*0.8;
   if(cape>1500) s *= 0.7;
   return s;
 }
 const RANKSC={min:0,max:10,c:['#9aa7ae','#6fae8c','#2f9e6b','#0b6b45']};
 const SCALES = {
-  score:{min:0,max:10,c:['#f1f5f7','#c9e7d6','#7cc8a0','#2f9e6b','#0b6b45'],u:''},
+  score:{min:0,max:10,c:['#eadfc8','#c9e7d6','#7cc8a0','#2f9e6b','#0b6b45'],u:''},
+  wstar:{min:0,max:800,c:['#eadfc8','#f6e3a4','#9fd08a','#2f9e6b','#0b5d3f'],u:' fpm'},
+  w700:{min:0,max:60,c:['#f1f5f7','#cfe0ea','#8bb4d0','#e0a458','#c0392b'],u:' kt'},
+  tcdc:{min:0,max:100,c:['#ffffff','#e4e8eb','#b9c2c8','#7f8b93','#4b555c'],u:' %'},
+  prate:{min:0,max:5,c:['#ffffff','#bfe3f5','#5fb0e0','#2f6fc0','#6a2c91'],u:' mm/h'},
   blh:{min:0,max:8000,c:['#f1f5f7','#cfe6f2','#79b8dd','#2f7fc0','#1b3f8a'],u:' ft'},
   cbase:{min:0,max:9000,c:['#f7efe3','#e8d3a7','#a9c98f','#4fa37a','#1f6b5f'],u:' ft'},
   w850:{min:0,max:45,c:['#f1f5f7','#cfe0ea','#8bb4d0','#e0a458','#c0392b'],u:' kt'},
@@ -413,12 +427,15 @@ const SCALES = {
   pop:{min:0,max:100,c:['#ffffff','#d6ecd2','#8ccf86','#3e9e5f','#1d6340'],u:' %'},
 };
 function hex2rgb(h){h=h.replace('#','');return [0,2,4].map(i=>parseInt(h.substr(i,2),16));}
-function color(v, sc){
-  if(v==null||isNaN(v)) return null;
+function rgbOf(v, sc){
   let t=(v-sc.min)/(sc.max-sc.min); t=Math.max(0,Math.min(1,t));
   const n=sc.c.length-1, i=Math.min(n-1,Math.floor(t*n)), f=t*n-i;
   const a=hex2rgb(sc.c[i]), b=hex2rgb(sc.c[i+1]);
-  return `rgb(${a.map((x,k)=>Math.round(x+(b[k]-x)*f)).join(',')})`;
+  return a.map((x,k)=>Math.round(x+(b[k]-x)*f));
+}
+function color(v, sc){
+  if(v==null||isNaN(v)) return null;
+  return `rgb(${rgbOf(v,sc).join(',')})`;
 }
 function legend(v){
   const el=document.getElementById('legend');
@@ -428,6 +445,7 @@ function legend(v){
 }
 let drawSeq = 0;
 async function drawField(){
+  if(MI) return drawModelField();
   const v=document.getElementById('variable').value, reg=document.getElementById('region').value;
   const hour=+document.getElementById('hour').value, op=+document.getElementById('opacity').value;
   document.getElementById('hourLabel').textContent=`${String(hour).padStart(2,'0')}:00 ET`;
@@ -452,9 +470,188 @@ async function drawField(){
   });
   document.getElementById('status').innerHTML=`${dayLabel()} ${String(hour).padStart(2,'0')}:00 ET. GFS via Open-Meteo, ${srcText(g.src,g.fetched)}. ${g.pts.length} grid points.`;
 }
-['variable','region','day'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{drawField();if(id==='day')renderRank();}));
+['variable','region','model','day'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{drawField();if(id==='day')renderRank();}));
 document.getElementById('hour').addEventListener('input',drawField);
-document.getElementById('opacity').addEventListener('input',()=>{const op=+document.getElementById('opacity').value;fieldLayer.eachLayer(l=>l.setStyle&&l.setStyle({fillOpacity:op}));});
+document.getElementById('opacity').addEventListener('input',()=>{const op=+document.getElementById('opacity').value;fieldLayer.eachLayer(l=>l.setStyle&&l.setStyle({fillOpacity:op}));if(fieldOverlay)fieldOverlay.setOpacity(op);});
+
+// ---------- NOAA model layers (scripts/fetch_models.py) ----------
+// cache/models/index.json lists each model's run, hours and image bounds. Each variable and hour is an
+// 8-bit grayscale PNG: value = lo + byte * (hi - lo) / 254, byte 255 = no data. Image rows are evenly
+// spaced in Web Mercator, so an image lies straight on the map between its bounds.
+let MI = null;                     // models index; null means fall back to Open-Meteo
+const MODEL_VARS = [
+  ['score','Soaring index (heuristic, 0 to 10)'], ['wstar','W* thermal strength, fpm'],
+  ['blh','Boundary layer top (thermal depth), ft AGL'], ['cbase','Estimated cumulus base, ft AGL'],
+  ['w850','850 hPa wind (~5,000 ft MSL), kt + arrows'], ['w700','700 hPa wind (~10,000 ft MSL), kt'],
+  ['gust','10 m wind gusts, kt + 850 hPa arrows'], ['cape','CAPE (overdevelopment risk), J/kg'],
+  ['li','Lifted index (lower = more unstable)'], ['low','Low cloud cover, %'], ['tcdc','Total cloud cover, %'],
+  ['prate','Rain rate, mm/h'], ['none','(no forecast field)']];
+const imgCache = new Map();        // "model/hour/var" -> Promise<{bytes, w, h}>, most recent last
+const IMG_CACHE_MAX = 30;
+let fieldOverlay = null, cur = null, dirImg = null;
+const arrowLayer = L.layerGroup().addTo(map);
+// ImageOverlay that shows a canvas we colored ourselves instead of loading an <img>
+const CanvasOverlay = L.ImageOverlay.extend({
+  _initImage(){
+    const el = this._image = this._url;
+    L.DomUtil.addClass(el,'leaflet-image-layer');
+    if(this._zoomAnimated) L.DomUtil.addClass(el,'leaflet-zoom-animated');
+    this._updateOpacity();
+  }
+});
+const pad2 = n => String(n).padStart(2,'0');
+const keyMs = k => Date.UTC(+k.slice(0,4), +k.slice(4,6)-1, +k.slice(6,8), +k.slice(8,10));
+const msKey = t => { const D=new Date(t); return `${D.getUTCFullYear()}${pad2(D.getUTCMonth()+1)}${pad2(D.getUTCDate())}${pad2(D.getUTCHours())}`; };
+const etHourFmt = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',hourCycle:'h23'});
+function etToUtcKey(day, hour){  // "YYYY-MM-DD" and an Eastern-time hour -> UTC "YYYYMMDDHH"
+  const [y,mo,d] = day.split('-').map(Number);
+  let t = Date.UTC(y,mo-1,d,hour+5);                   // right for EST; one hour late in EDT
+  t -= (+etHourFmt.format(new Date(t)) - hour) * 36e5;
+  return msKey(t);
+}
+const etLabel = k => new Date(keyMs(k)).toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',hour:'numeric'});
+function pickModel(key){
+  const want = document.getElementById('model').value;
+  const order = want==='auto' ? ['hrrr','gfs'] : [want];
+  for(const name of order){
+    const m = MI.models[name]; if(!m) continue;
+    if(m.hours.includes(key)) return {name, hour:key};
+    // GFS is 3-hourly after day 5: take the nearest hour within 2 h
+    let best=null, bd=Infinity;
+    m.hours.forEach(h=>{ const d=Math.abs(keyMs(h)-keyMs(key)); if(d<bd){bd=d; best=h;} });
+    if(best && bd<=2*36e5 && (want!=='auto' || name!=='hrrr')) return {name, hour:best};
+  }
+  return null;
+}
+function loadBytes(model, hour, v){
+  const k = `${model}/${hour}/${v}`;
+  if(imgCache.has(k)){ const p=imgCache.get(k); imgCache.delete(k); imgCache.set(k,p); return p; }
+  const m = MI.models[model];
+  const p = new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+      const x = c.getContext('2d', {willReadFrequently:true}); x.drawImage(im,0,0);
+      const d = x.getImageData(0,0,c.width,c.height).data, b = new Uint8Array(c.width*c.height);
+      for(let i=0;i<b.length;i++) b[i] = d[i*4];
+      res({bytes:b, w:c.width, h:c.height});
+    };
+    im.onerror = () => rej(new Error('missing image '+k));
+    im.src = MI.base + m.path.replace('{hour}',hour).replace('{var}',v);
+  });
+  p.catch(()=>imgCache.delete(k));
+  imgCache.set(k,p);
+  while(imgCache.size>IMG_CACHE_MAX) imgCache.delete(imgCache.keys().next().value);
+  return p;
+}
+const byteVal = (v, b) => b===255 ? null : MI.vars[v].lo + b*(MI.vars[v].hi-MI.vars[v].lo)/254;
+const mercY = lat => Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360));
+function sampleAt(img, bounds, lat, lon){  // byte under a lat/lon, or 255 outside the image
+  const [[s,w],[n,e]] = bounds;
+  const col = Math.floor((lon-w)/(e-w)*img.w), row = Math.floor((mercY(n)-mercY(lat))/(mercY(n)-mercY(s))*img.h);
+  return (col<0||row<0||col>=img.w||row>=img.h) ? 255 : img.bytes[row*img.w+col];
+}
+function colorize(img, v){
+  const sc = SCALES[v], lut = new Uint8ClampedArray(256*4);
+  for(let b=0;b<255;b++){ const [r,g,bl] = rgbOf(byteVal(v,b), sc); lut.set([r,g,bl,255], b*4); }
+  const c = document.createElement('canvas'); c.width = img.w; c.height = img.h;
+  const x = c.getContext('2d'), id = x.createImageData(img.w, img.h), px = id.data;
+  for(let i=0;i<img.bytes.length;i++){ const o=img.bytes[i]*4; px[i*4]=lut[o]; px[i*4+1]=lut[o+1]; px[i*4+2]=lut[o+2]; px[i*4+3]=lut[o+3]; }
+  x.putImageData(id,0,0);
+  return c;
+}
+function drawArrows(){
+  arrowLayer.clearLayers();
+  if(!cur || !dirImg || !['w850','gust'].includes(cur.v)) return;
+  const size = map.getSize(), step = 60;
+  for(let y=step/2; y<size.y; y+=step) for(let x=step/2; x<size.x; x+=step){
+    const ll = map.containerPointToLatLng([x,y]), b = sampleAt(dirImg, cur.bounds, ll.lat, ll.lng);
+    if(b===255) continue;
+    const d = byteVal('d850', b);
+    L.marker(ll,{pane:'field',interactive:false,icon:L.divIcon({className:'wind-arrow',html:`<div style="transform:rotate(${d+180}deg)">&#x2191;</div>`,iconSize:[15,15]})}).addTo(arrowLayer);
+  }
+}
+map.on('moveend', drawArrows);
+const readout = L.control({position:'bottomleft'});
+readout.onAdd = () => { const d = L.DomUtil.create('div','readout'); d.id='readout'; d.hidden=true; return d; };
+readout.addTo(map);
+map.on('mousemove', e => {
+  const el = document.getElementById('readout');
+  if(!cur){ el.hidden = true; return; }
+  const b = sampleAt(cur.img, cur.bounds, e.latlng.lat, e.latlng.lng), x = byteVal(cur.v, b);
+  el.hidden = false;
+  el.textContent = x==null ? 'no data here' : `${cur.v==='score'?x.toFixed(1):Math.round(x).toLocaleString()}${SCALES[cur.v].u}  (${cur.label})`;
+});
+map.on('mouseout', () => { document.getElementById('readout').hidden = true; });
+function runText(m){
+  return new Date(m.cycle).toLocaleString('en-US',{timeZone:'UTC',month:'short',day:'numeric',hour:'2-digit',hourCycle:'h23'}).replace(/, (\d\d)$/,' $1Z') ;
+}
+async function drawModelField(){
+  const v = document.getElementById('variable').value, hour = +document.getElementById('hour').value;
+  const op = +document.getElementById('opacity').value;
+  document.getElementById('hourLabel').textContent = `${pad2(hour)}:00 ET`;
+  const seq = ++drawSeq;
+  legend(v);
+  if(v==='none'){ if(fieldOverlay){map.removeLayer(fieldOverlay); fieldOverlay=null;} cur=null; arrowLayer.clearLayers(); status(''); return; }
+  const key = etToUtcKey(dayKey(), hour), pick = pickModel(key);
+  if(!pick){
+    if(fieldOverlay){map.removeLayer(fieldOverlay); fieldOverlay=null;} cur=null; arrowLayer.clearLayers();
+    status(`No ${document.getElementById('model').selectedOptions[0].text.replace(/ \(.*/,'')} forecast for ${dayLabel()} ${pad2(hour)}:00 ET in the current runs.`);
+    return;
+  }
+  const m = MI.models[pick.name];
+  status(`Loading ${m.label} ${VNAME[v]||v}...`, 0.4);
+  let img;
+  try{ img = await loadBytes(pick.name, pick.hour, v); }
+  catch(e){ if(seq===drawSeq) status('Forecast image unavailable: '+e.message+'.'); return; }
+  if(seq!==drawSeq) return;   // the user moved on while this was loading
+  const canvas = colorize(img, v);
+  if(fieldOverlay) map.removeLayer(fieldOverlay);
+  fieldOverlay = new CanvasOverlay(canvas, m.bounds, {opacity:op, pane:'field', interactive:false}).addTo(map);
+  cur = {v, img, bounds:m.bounds, label:m.label};
+  dirImg = null; arrowLayer.clearLayers();
+  if(['w850','gust'].includes(v)){
+    try{ dirImg = await loadBytes(pick.name, pick.hour, 'd850'); }catch(e){}
+    if(seq===drawSeq) drawArrows();
+  }
+  const near = pick.hour!==key ? ` Nearest model hour: ${etLabel(pick.hour)} ET.` : '';
+  document.getElementById('status').innerHTML = `${dayLabel()} ${pad2(hour)}:00 ET.${near} <b>${esc(m.label)}</b>, run ${runText(m)}, ${srcText('cache', m.fetched)}. ${m.width} x ${m.height} pixels.`;
+  // fetch the neighbouring hours in the background so the slider feels instant
+  [-1,1].forEach(dh => { const k2 = etToUtcKey(dayKey(), hour+dh); if(m.hours.includes(k2)) loadBytes(pick.name, k2, v).catch(()=>{}); });
+}
+const VNAME = Object.fromEntries(MODEL_VARS);
+async function loadModelSites(live){
+  const lists = [];
+  for(const name of ['hrrr','gfs']){
+    const m = MI.models[name]; if(!m) continue;
+    try{ const r = await fetch(MI.base + m.sites, {cache:'no-cache'}); if(r.ok) lists.push([m, await r.json()]); }catch(e){}
+  }
+  if(!lists.length){ siteSrc = {state:'error', msg:'NOAA site forecast files missing'}; renderRank(); return; }
+  live.forEach(o => {
+    siteFc[o.id] = {};
+    // HRRR first; GFS fills the days HRRR does not cover
+    lists.forEach(([m, j]) => {
+      const s = j.sites[o.id]; if(!s) return;
+      const days = siteDays(o, s.hourly, `${m.label}, run ${runText(m)}`);
+      Object.entries(days).forEach(([d, f]) => { if(!siteFc[o.id][d]) siteFc[o.id][d] = f; });
+    });
+  });
+  const newest = lists.map(([m])=>m.fetched).sort()[0];
+  siteSrc = {state:'ok', src:'cache', fetched:newest, label:'NOAA HRRR, then GFS'};
+  renderRank();
+}
+async function initModels(){
+  const [j, base] = await cachedAt('models/index.json');
+  if(!j || !Object.keys(j.models||{}).length) return;
+  MI = {...j, base: base + 'models/'};   // paths in the index are relative to cache/models/
+  document.getElementById('fieldLegend').textContent = 'Forecast field (NOAA HRRR and GFS)';
+  document.getElementById('region').hidden = true;
+  document.getElementById('model').hidden = false;
+  const vs = document.getElementById('variable'), keep = vs.value;
+  vs.innerHTML = MODEL_VARS.map(([k,l]) => `<option value="${k}">${l}</option>`).join('');
+  if(MODEL_VARS.some(([k])=>k===keep)) vs.value = keep;
+  const hr = document.getElementById('hour'); hr.max = 21;
+}
 
 // ---------- per-site daily forecast ----------
 const siteFc = {};
@@ -462,6 +659,7 @@ let siteSrc = {state:'loading'};
 async function loadSites(){
   const live = OPS.filter(o=>o.rental!=='CLOSED');
   let pairs;
+  if(MI){ await loadModelSites(live); return; }
   const c = await cached('openmeteo/sites.json');
   if(c && c.sites){
     pairs = live.filter(o=>c.sites[o.id]).map(o=>[o,c.sites[o.id]]);
@@ -473,24 +671,32 @@ async function loadSites(){
     pairs = live.map((o,k)=>[o,res[k]]);
     siteSrc = {state:'ok', src:'live'};
   }
-  pairs.forEach(([o,r])=>{
-    const h=r.hourly, byDay={};
-    h.time.forEach((t,i)=>{
-      const hr=+t.slice(11,13); if(hr<11||hr>17) return;
-      const d=t.slice(0,10); (byDay[d] ||= []).push(i);
-    });
-    siteFc[o.id]={};
-    Object.entries(byDay).forEach(([d,ix])=>{
-      const mx=k=>Math.max(...ix.map(i=>h[k][i]??0)), mean=k=>ix.reduce((a,i)=>a+(h[k][i]??0),0)/ix.length;
-      const blh=mx('boundary_layer_height')*3.281, cb=Math.max(...ix.map(i=>(h.temperature_2m[i]-h.dew_point_2m[i])*400));
-      const w=mean('wind_speed_850hPa'), dd=circMean(ix.map(i=>h.wind_direction_850hPa[i]));
-      const th=thermalScore(blh,mean('cloud_cover_low'),mx('precipitation_probability'),mx('cape'));
-      let ridge=0; const rd=RIDGE[o.id];
-      if(rd){ const off=Math.abs(((dd-rd[0]+540)%360)-180); if(off<=rd[1] && w>=12 && w<=35) ridge = 10*(1-off/rd[1]*0.4)*Math.min(1,(w-8)/12) * (1-Math.min(1,Math.max(0,(mx('precipitation_probability')-30)/50))*0.8); }
-      siteFc[o.id][d]={blh,cb,w850:w,d850:dd,gust:mx('wind_gusts_10m'),pop:mx('precipitation_probability'),cape:mx('cape'),th,ridge,score:Math.max(th,ridge)};
-    });
-  });
+  pairs.forEach(([o,r])=>{ siteFc[o.id] = siteDays(o, r.hourly); });
   renderRank();
+}
+// Daily site forecast from hourly values, 11:00 to 17:00 local. Hourly keys follow Open-Meteo's names;
+// NOAA site files give a rain rate ("precipitation", mm/h) instead of a probability.
+function siteDays(o, h, label){
+  const byDay={}, out={}, rate = !h.precipitation_probability;
+  h.time.forEach((t,i)=>{
+    const hr=+t.slice(11,13); if(hr<11||hr>17) return;
+    const d=t.slice(0,10); (byDay[d] ||= []).push(i);
+  });
+  Object.entries(byDay).forEach(([d,ix])=>{
+    // whole 11:00 to 17:00 windows only: 7 hourly values, or 3 once GFS goes 3-hourly after day 5
+    const hourly = ix.length>1 && +h.time[ix[1]].slice(11,13) - +h.time[ix[0]].slice(11,13) === 1;
+    if(ix.length < (hourly ? 7 : 3)) return;
+    const mx=k=>Math.max(...ix.map(i=>h[k]?.[i]??0)), mean=k=>ix.reduce((a,i)=>a+(h[k]?.[i]??0),0)/ix.length;
+    const rain = rate ? mx('precipitation') : mx('precipitation_probability');
+    const blh=mx('boundary_layer_height')*3.281, cb=Math.max(...ix.map(i=>(h.temperature_2m[i]-h.dew_point_2m[i])*400));
+    const w=mean('wind_speed_850hPa'), dd=circMean(ix.map(i=>h.wind_direction_850hPa[i]));
+    const th=thermalScore(blh,mean('cloud_cover_low'),rain,mx('cape'),rate);
+    let ridge=0; const rd=RIDGE[o.id];
+    if(rd){ const off=Math.abs(((dd-rd[0]+540)%360)-180); if(off<=rd[1] && w>=12 && w<=35) ridge = 10*(1-off/rd[1]*0.4)*Math.min(1,(w-8)/12) * (1-rainCut(rain, rate)*0.8); }
+    out[d]={blh,cb,w850:w,d850:dd,gust:mx('wind_gusts_10m'),rain,rate,cape:mx('cape'),th,ridge,score:Math.max(th,ridge),
+            wstar: h.wstar ? mx('wstar')*196.85 : null, src: label||'GFS via Open-Meteo', hours: ix.length};
+  });
+  return out;
 }
 function circMean(a){const s=a.reduce((x,d)=>x+Math.sin(d*Math.PI/180),0),c=a.reduce((x,d)=>x+Math.cos(d*Math.PI/180),0);return (Math.atan2(s,c)*180/Math.PI+360)%360;}
 function renderRank(){
@@ -499,7 +705,7 @@ function renderRank(){
   const note = t => `<li class="small" style="display:block">${t}</li>`;
   if(siteSrc.state==='error'){ol.innerHTML=note(`Site forecasts unavailable: ${esc(siteSrc.msg)}.`);return;}
   if(!rows.length){ol.innerHTML=note(siteSrc.state==='loading'?'Loading site forecasts...':'No site forecast for this day.');return;}
-  ol.innerHTML = note(`GFS via Open-Meteo, ${srcText(siteSrc.src,siteSrc.fetched)}.`) + rows.map(({o,f})=>`<li data-id="${o.id}"><span class="score" style="background:${color(f.score,RANKSC)}">${f.score.toFixed(1)}</span><span>${esc(o.name)}<br><span class="small">${f.ridge>f.th?'ridge ':''}${ACCESS[o.access]} &middot; ${RENTAL[o.rental][0]}</span></span><span class="dot" style="background:var(${RENTAL[o.rental][1]})"></span></li>`).join('');
+  ol.innerHTML = note(`${siteSrc.label||'GFS via Open-Meteo'}, ${srcText(siteSrc.src,siteSrc.fetched)}.`) + rows.map(({o,f})=>`<li data-id="${o.id}"><span class="score" style="background:${color(f.score,RANKSC)}">${f.score.toFixed(1)}</span><span>${esc(o.name)}<br><span class="small">${f.ridge>f.th?'ridge ':''}${ACCESS[o.access]} &middot; ${RENTAL[o.rental][0]}</span></span><span class="dot" style="background:var(${RENTAL[o.rental][1]})"></span></li>`).join('');
 }
 document.getElementById('rank').addEventListener('click',e=>{const li=e.target.closest('li[data-id]'); if(!li) return; const o=OPS.find(x=>x.id===li.dataset.id); map.setView([o.lat,o.lon],9); showDetail(o.id);});
 
@@ -542,7 +748,8 @@ const _ds=drawSites; drawSites=function(){_ds(); renderGliders();};
 ['vanOnly','tallOnly'].forEach(id=>document.getElementById(id).addEventListener('change',renderGliders));
 rf.addEventListener('change',renderGliders);
 
-drawSites(); renderGliders(); drawField(); loadSites();
+drawSites(); renderGliders();
+initModels().finally(() => { drawField(); loadSites(); });
 </script>
 </body>
 </html>

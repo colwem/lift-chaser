@@ -1,28 +1,35 @@
 # Fetch forecasts, build the page and deploy to Cloudflare Pages (project "lift-chaser").
-# Times are UTC. Open-Meteo GFS updates every 6 h; RASP runs finish overnight.
+# Times are UTC. HRRR 00/06/12/18Z runs reach 48 h about 2 h after the run; GFS about 4 h after.
 # Needs repo secrets CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit) and CLOUDFLARE_ACCOUNT_ID.
 name: update-forecasts
 on:
   schedule:
-    - cron: "15 10,16,22 * * *"   # 06:15, 12:15, 18:15 EDT
+    - cron: "30 2,8,14,20 * * *"   # 2.5 h after each HRRR 48 h run
   workflow_dispatch: {}
   push:
     branches: [main]
-    paths: ["data/**", "site/template.html", "scripts/**", ".github/workflows/**"]
+    paths: ["data/**", "site/template.html", "scripts/**", "requirements.txt", ".github/workflows/**"]
 concurrency: { group: deploy, cancel-in-progress: false }
 permissions:
-  contents: read
+  contents: write   # for the run log on the archive branch
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      # Start from the deployed cache, so a failed fetch keeps the last good forecast
-      # (the page flags it stale after 12 h) instead of publishing none.
-      - name: Seed cache from the live site
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+
+      # NOAA GFS and HRRR straight from AWS (scripts/fetch_models.py). If every model fails the step
+      # fails, nothing is deployed, and the site keeps its last good version (flagged stale after 12 h).
+      - run: python scripts/fetch_models.py
+        env:
+          FETCH_BUDGET_S: "1200"
+
+      # Open-Meteo: fallback only, while the NOAA pipeline proves itself (see BACKLOG.md).
+      - name: Seed Open-Meteo cache from the live site
         run: |
           mkdir -p cache/openmeteo
           for f in sites grid_ne grid_east grid_conus; do
@@ -36,7 +43,8 @@ jobs:
           # see OM_BATCH in fetch_forecasts.py: runners get about one Open-Meteo connection a minute
           OM_BATCH: "300"
           OM_GAP_S: "65"
-          FETCH_BUDGET_S: "900"
+          FETCH_BUDGET_S: "600"
+
       - run: python scripts/build_site.py
       - run: mkdir -p public && cp site/index.html public/ && cp -r cache public/ && rm -f public/cache/.gitkeep
       - name: Create the Pages project if it does not exist yet
@@ -51,3 +59,29 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy public --project-name=lift-chaser --branch=main
+
+      # One line per run on the "archive" branch: what the site showed and when. The forecasts
+      # themselves are not archived; NOAA keeps them and fetch_models.py --cycle rebuilds any run.
+      - name: Append to the run log
+        if: always()
+        run: |
+          git config user.name "chase-lift bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin archive >/dev/null; then
+            git fetch -q origin archive && git worktree add -q ../archive origin/archive -B archive
+          else
+            git worktree add -q --orphan -b archive ../archive
+          fi
+          python - <<'EOF' >> ../archive/runs.jsonl
+          import json, os, pathlib
+          idx = pathlib.Path("cache/models/index.json")
+          man = pathlib.Path("cache/models/manifest.json")
+          models = json.loads(idx.read_text())["models"] if idx.exists() else {}
+          print(json.dumps({
+              "run": os.environ["GITHUB_RUN_ID"], "sha": os.environ["GITHUB_SHA"][:7],
+              "event": os.environ["GITHUB_EVENT_NAME"], "status": "${{ job.status }}",
+              "models": {k: {"cycle": v["cycle"], "hours": len(v["hours"]), "fetched": v["fetched"]} for k, v in models.items()},
+              "manifest": json.loads(man.read_text()) if man.exists() else None,
+          }, separators=(",", ":")))
+          EOF
+          cd ../archive && git add runs.jsonl && git commit -qm "Run log: ${{ github.run_id }}" && git push -q origin archive
