@@ -345,7 +345,14 @@ def main():
     manifest["finished"] = index["generated"]
     (out_root / "manifest.json").write_text(json.dumps(manifest, indent=1))
     log(json.dumps({k: (len(v) if isinstance(v, list) else v) for k, v in manifest.items()}))
-    sys.exit(1 if manifest["errors"] and not manifest["ok"] else 0)
+    for e in manifest["errors"]:
+        log("ERROR " + e)
+    code = 1 if manifest["errors"] and not manifest["ok"] else 0
+    # On the GitHub Ubuntu runner the eccodes library crashed during interpreter shutdown
+    # ("double free or corruption", 2026-09-23) after all files were written, turning a good run
+    # into a failure. Everything is flushed and written by now, so skip the teardown.
+    sys.stdout.flush(); sys.stderr.flush()
+    os._exit(code)
 
 if __name__ == "__main__":
     main()
