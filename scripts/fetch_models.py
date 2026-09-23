@@ -221,9 +221,9 @@ def derive(F):
 
 def encode(a, var):
     lo, hi = OUT_VARS[var]["lo"], OUT_VARS[var]["hi"]
-    b = np.rint((a - lo) / (hi - lo) * 254)
-    b = np.clip(np.nan_to_num(b, nan=255), 0, 255).astype(np.uint8)
-    b[np.isnan(a)] = 255
+    # values outside the range clip to 0 or 254 ("at most lo" / "at least hi"); only NaN becomes 255
+    b = np.clip(np.rint((a - lo) / (hi - lo) * 254), 0, 254)
+    b = np.where(np.isnan(a), 255, b).astype(np.uint8)
     return b
 
 # ---------- hours ----------

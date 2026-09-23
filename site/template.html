@@ -580,7 +580,9 @@ map.on('mousemove', e => {
   if(!cur){ el.hidden = true; return; }
   const b = sampleAt(cur.img, cur.bounds, e.latlng.lat, e.latlng.lng), x = byteVal(cur.v, b);
   el.hidden = false;
-  el.textContent = x==null ? 'no data here' : `${cur.v==='score'?x.toFixed(1):Math.round(x).toLocaleString()}${SCALES[cur.v].u}  (${cur.label})`;
+  // bytes 0 and 254 are the ends of the stored range: the true value may be beyond them
+  const bound = b===254 ? '≥ ' : (b===0 && MI.vars[cur.v].lo<0) ? '≤ ' : '';
+  el.textContent = x==null ? 'no data here' : `${bound}${cur.v==='score'?x.toFixed(1):Math.round(x).toLocaleString()}${SCALES[cur.v].u}  (${cur.label})`;
 });
 map.on('mouseout', () => { document.getElementById('readout').hidden = true; });
 function runText(m){
