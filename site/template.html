@@ -57,6 +57,9 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .hour{font-family:var(--mono);font-size:13px;min-width:70px;text-align:right;flex:0 0 auto}
 .dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:0 0 auto;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
 #status{font-size:12.5px;color:var(--muted);min-height:18px;margin-top:6px}
+.loading::before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;border:2px solid var(--accent);border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bar{height:4px;background:var(--line);border-radius:2px;margin-top:4px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--accent);transition:width .3s}
 #legend{margin-top:6px}
 .ramp{height:10px;border-radius:2px;border:1px solid var(--line)}
 .ramp-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted)}
@@ -85,6 +88,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <aside id="side">
   <h1>Chase-Lift Map</h1>
   <div class="sub">Glider sites within a Friday-night van drive or cheap flight from Boston, over live weather and a GFS soaring forecast. Data compiled 2026-09-22. Click a site for its full fleet with glide ratios and speeds.</div>
+  <div class="small mono" id="build"></div>
 
   <fieldset>
     <legend>Forecast field (GFS via Open-Meteo)</legend>
@@ -162,6 +166,8 @@ const OPS = __OPS__;
 const FLEET = __FLEET__;
 const TYPES = __TYPES__;
 const RASP = __RASP__;
+const BUILD = __BUILD__;
+document.getElementById('build').textContent = `Build ${BUILD.sha}, ${BUILD.time}`;
 const RENTAL = {RENT:["Rents to visitors","--rent"],GUEST:["Guest / short-term membership","--guest"],JOIN:["Membership required","--join"],UNK:["Unknown, call","--unk"],CLOSED:["Closed / inactive","--closed"]};
 const ACCESS = {VAN:"Van, 4 h or less",VANEDGE:"Van, about 4 h",FLY:"Fly Friday night",FAR:"Out of range"};
 // working wind direction (deg, from) and half-width for ridge sites
@@ -278,7 +284,12 @@ const VARS = 'boundary_layer_height,temperature_2m,dew_point_2m,cape,lifted_inde
 const REGIONS = {ne:{la:[39.5,47],lo:[-80,-67],s:.5}, east:{la:[29,47],lo:[-90,-67],s:1}, conus:{la:[25,49],lo:[-124.5,-67],s:1.5}};
 const gridCache = {};
 const fieldLayer = L.layerGroup().addTo(map);
-const status = m => document.getElementById('status').textContent = m;
+// status line under the legend; pass frac (0..1) to show it as loading with a progress bar
+const status = (m, frac) => {
+  const el = document.getElementById('status');
+  if (frac === undefined) { el.textContent = m; return; }
+  el.innerHTML = `<span class="loading">${esc(m)}</span><div class="bar"><i style="width:${Math.round(frac*100)}%"></i></div>`;
+};
 
 // Live Open-Meteo fetches (used only when the cache is missing). The free tier counts each point as
 // one call and allows 600 a minute per IP, so requests go through one queue that keeps a rolling
@@ -301,23 +312,33 @@ async function omRequest(url, n, msg){
     }
     omLog.push([Date.now(), n]);
     const r = await fetch(url);
-    if(r.status===429 && attempt<OM_RETRIES){
-      await countdown(65, s=>msg(`Open-Meteo rate limit reached, retrying automatically in ${s} s (attempt ${attempt+1} of ${OM_RETRIES})`));
+    if(r.status===429){
+      // Open-Meteo says which limit in its JSON "reason": minutely, hourly or daily
+      const reason = await r.json().then(j=>j.reason||'').catch(()=>'');
+      if(/daily/i.test(reason)) throw new Error("Open-Meteo's daily free limit for this network is used up, so live forecasts are off until it resets tomorrow (" + reason + ")");
+      if(attempt>=OM_RETRIES) throw new Error(`Open-Meteo kept refusing after ${OM_RETRIES} tries (${reason||'HTTP 429'})`);
+      if(/hourly/i.test(reason)){
+        const wait = Math.ceil((3600000 - Date.now()%3600000)/1000) + 10;  // just past the top of the hour
+        await countdown(wait, s=>msg(`Open-Meteo hourly limit reached, retrying automatically in ${Math.floor(s/60)} min ${s%60} s`));
+      } else {
+        await countdown(65, s=>msg(`Open-Meteo minute limit reached, retrying automatically in ${s} s (attempt ${attempt+1} of ${OM_RETRIES})`));
+      }
       continue;
     }
-    if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status+(r.status===429?' after '+OM_RETRIES+' tries':''));
+    if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status);
     return r.json();
   }
 }
 function fetchPoints(pts, tz, msg=status){
   const run = async () => {
     const out=[]; const n=50;
+    msg(`Loading forecast live, 0 / ${pts.length} points`, 0);
     for(let i=0;i<pts.length;i+=n){
       const ch=pts.slice(i,i+n);
       const url=`https://api.open-meteo.com/v1/gfs?latitude=${ch.map(p=>p[0].toFixed(2)).join(',')}&longitude=${ch.map(p=>p[1].toFixed(2)).join(',')}&hourly=${VARS}&wind_speed_unit=kn&forecast_days=7&timezone=${encodeURIComponent(tz)}`;
-      const j = await omRequest(url, ch.length, m=>msg(`Loading forecast live, ${i} / ${pts.length} points: ${m}.`));
+      const j = await omRequest(url, ch.length, m=>msg(`Loading forecast live, ${i} / ${pts.length} points: ${m}.`, i/pts.length));
       (Array.isArray(j)?j:[j]).forEach(x=>out.push(x));
-      msg(`Loading forecast live, ${Math.min(i+n,pts.length)} / ${pts.length} points`);
+      msg(`Loading forecast live, ${Math.min(i+n,pts.length)} / ${pts.length} points`, Math.min(i+n,pts.length)/pts.length);
     }
     return out;
   };
@@ -413,6 +434,7 @@ async function drawField(){
   const seq = ++drawSeq;
   legend(v); fieldLayer.clearLayers();
   if(v==='none'){status('');return;}
+  status(`Loading ${document.getElementById('region').selectedOptions[0].text} forecast...`, 0);
   let g; try{ g=await loadGrid(reg);}catch(e){ if(seq===drawSeq) status('Forecast unavailable: '+e.message+'.'); return; }
   if(seq!==drawSeq) return;  // the user changed region, day or variable while this was loading
   const t = `${dayKey()}T${String(hour).padStart(2,'0')}:00`;

@@ -19,7 +19,7 @@ Outputs (all under cache/):
                                         daytime hours only, one value list per variable per point
   manifest.json                         what was fetched, when, errors
 """
-import json, pathlib, sys, time, datetime as dt, urllib.error, urllib.request, urllib.parse
+import json, os, pathlib, sys, time, datetime as dt, urllib.error, urllib.request, urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
@@ -33,6 +33,15 @@ OM_VARS = ("boundary_layer_height,temperature_2m,dew_point_2m,cape,lifted_index,
 PAUSE = 1.0  # seconds between requests to other people's servers; be polite
 OM_POINTS_PER_MIN = 450  # stay under Open-Meteo's 600 locations a minute
 OM_RETRIES = 5
+# Points per request and minimum seconds between requests. The defaults suit a home connection.
+# From GitHub Actions runners (2026-09-23), a new connection sent ~7 s after the last one timed out
+# every time while one sent 65 s later always worked, so the workflow sets OM_BATCH=300, OM_GAP_S=65.
+OM_BATCH = int(os.environ.get("OM_BATCH", 50))
+OM_GAP_S = float(os.environ.get("OM_GAP_S", 0))
+# Stop starting new Open-Meteo requests after this many seconds, so a slow or blocking server
+# can never hold up a deploy; whatever was not fetched keeps its previous cached file.
+FETCH_BUDGET_S = float(os.environ.get("FETCH_BUDGET_S", 600))
+DEADLINE = time.monotonic() + FETCH_BUDGET_S
 # Map grids; keep in step with REGIONS in site/template.html (the page reads R and pts from the file).
 GRIDS = {"ne": {"la": [39.5, 47], "lo": [-80, -67], "s": .5},
          "east": {"la": [29, 47], "lo": [-90, -67], "s": 1},
@@ -106,15 +115,17 @@ def now_iso():
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 def openmeteo(points, tz, label):
-    """Hourly GFS for a list of (lat, lon), in batches of 50, paced and retried on HTTP 429."""
+    """Hourly GFS for a list of (lat, lon), in batches of OM_BATCH, paced, retried on 429 and timeouts."""
     out = []
-    for i in range(0, len(points), 50):
-        ch = points[i:i + 50]
+    for i in range(0, len(points), OM_BATCH):
+        ch = points[i:i + OM_BATCH]
         q = urllib.parse.urlencode(dict(latitude=",".join(f"{la:.3f}" for la, _ in ch),
                                         longitude=",".join(f"{lo:.3f}" for _, lo in ch),
                                         hourly=OM_VARS, wind_speed_unit="kn", forecast_days=7, timezone=tz))
         url = f"https://api.open-meteo.com/v1/gfs?{q}"
         for attempt in range(OM_RETRIES):
+            if time.monotonic() > DEADLINE:
+                raise TimeoutError(f"fetch time budget ({FETCH_BUDGET_S:.0f} s) used up at {i}/{len(points)} points")
             try:
                 res = get(url); break
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
@@ -123,12 +134,13 @@ def openmeteo(points, tz, label):
                 code = getattr(e, "code", None)
                 if (code is not None and code != 429) or attempt == OM_RETRIES - 1:
                     raise
-                print(f"  {label}: {e!r}, retrying in 65 s ({attempt + 2}/{OM_RETRIES})", flush=True)
-                time.sleep(65)  # let the one-minute window roll over
+                wait = 65 if code == 429 else max(20, OM_GAP_S)  # 429: let the one-minute window roll over
+                print(f"  {label}: {e!r}, retrying in {wait} s ({attempt + 2}/{OM_RETRIES})", flush=True)
+                time.sleep(wait)
         j = json.loads(res)
         out += j if isinstance(j, list) else [j]
-        print(f"  {label}: {min(i + 50, len(points))}/{len(points)} points", flush=True)
-        time.sleep(len(ch) * 60 / OM_POINTS_PER_MIN)
+        print(f"  {label}: {min(i + OM_BATCH, len(points))}/{len(points)} points", flush=True)
+        time.sleep(max(OM_GAP_S, len(ch) * 60 / OM_POINTS_PER_MIN))
     return out
 
 def fetch_openmeteo_sites():

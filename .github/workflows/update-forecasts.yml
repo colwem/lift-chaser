@@ -15,7 +15,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,6 +32,11 @@ jobs:
           done
       # Add --rasp here once Steve Paavola has agreed to automated fetches.
       - run: python scripts/fetch_forecasts.py
+        env:
+          # see OM_BATCH in fetch_forecasts.py: runners get about one Open-Meteo connection a minute
+          OM_BATCH: "300"
+          OM_GAP_S: "65"
+          FETCH_BUDGET_S: "900"
       - run: python scripts/build_site.py
       - run: mkdir -p public && cp site/index.html public/ && cp -r cache public/ && rm -f public/cache/.gitkeep
       - name: Create the Pages project if it does not exist yet
