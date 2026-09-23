@@ -32,6 +32,7 @@ OM_VARS = ("boundary_layer_height,temperature_2m,dew_point_2m,cape,lifted_index,
            "precipitation_probability,wind_speed_850hPa,wind_direction_850hPa,wind_gusts_10m")
 PAUSE = 1.0  # seconds between requests to other people's servers; be polite
 OM_POINTS_PER_MIN = 450  # stay under Open-Meteo's 600 locations a minute
+OM_RETRIES = 5
 # Map grids; keep in step with REGIONS in site/template.html (the page reads R and pts from the file).
 GRIDS = {"ne": {"la": [39.5, 47], "lo": [-80, -67], "s": .5},
          "east": {"la": [29, 47], "lo": [-90, -67], "s": 1},
@@ -42,7 +43,7 @@ manifest = {"started": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seco
 
 def get(url, data=None):
     req = urllib.request.Request(url, data=data, headers=UA)
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with urllib.request.urlopen(req, timeout=30) as r:
         return r.read()
 
 def save(path, blob):
@@ -113,13 +114,17 @@ def openmeteo(points, tz, label):
                                         longitude=",".join(f"{lo:.3f}" for _, lo in ch),
                                         hourly=OM_VARS, wind_speed_unit="kn", forecast_days=7, timezone=tz))
         url = f"https://api.open-meteo.com/v1/gfs?{q}"
-        for attempt in range(3):
+        for attempt in range(OM_RETRIES):
             try:
                 res = get(url); break
-            except urllib.error.HTTPError as e:
-                if e.code != 429 or attempt == 2:
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+                # 429 = minute limit hit; timeouts and resets have been seen from GitHub's runners.
+                # Anything else (400, 500...) is not worth retrying.
+                code = getattr(e, "code", None)
+                if (code is not None and code != 429) or attempt == OM_RETRIES - 1:
                     raise
-                time.sleep(65)  # minute limit hit; wait for the window to roll over
+                print(f"  {label}: {e!r}, retrying in 65 s ({attempt + 2}/{OM_RETRIES})", flush=True)
+                time.sleep(65)  # let the one-minute window roll over
         j = json.loads(res)
         out += j if isinstance(j, list) else [j]
         print(f"  {label}: {min(i + 50, len(points))}/{len(points)} points", flush=True)

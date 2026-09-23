@@ -280,18 +280,49 @@ const gridCache = {};
 const fieldLayer = L.layerGroup().addTo(map);
 const status = m => document.getElementById('status').textContent = m;
 
-async function fetchPoints(pts, tz){
-  const out=[]; const n=50;
-  for(let i=0;i<pts.length;i+=n){
-    const ch=pts.slice(i,i+n);
-    const url=`https://api.open-meteo.com/v1/gfs?latitude=${ch.map(p=>p[0].toFixed(2)).join(',')}&longitude=${ch.map(p=>p[1].toFixed(2)).join(',')}&hourly=${VARS}&wind_speed_unit=kn&forecast_days=7&timezone=${encodeURIComponent(tz)}`;
+// Live Open-Meteo fetches (used only when the cache is missing). The free tier counts each point as
+// one call and allows 600 a minute per IP, so requests go through one queue that keeps a rolling
+// one-minute budget, and a 429 is waited out and retried instead of failing.
+const OM_BUDGET = 500, OM_RETRIES = 5;
+const omLog = [];            // [time ms, points] for requests in the last minute
+let omQueue = Promise.resolve();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function countdown(sec, msg){
+  for(let s=sec; s>0; s--){ msg(s); await sleep(1000); }
+}
+async function omRequest(url, n, msg){
+  for(let attempt=1; ; attempt++){
+    // wait until this batch fits in the rolling one-minute budget
+    for(;;){
+      const now=Date.now(); while(omLog.length && now-omLog[0][0]>60000) omLog.shift();
+      const used=omLog.reduce((a,x)=>a+x[1],0);
+      if(used+n<=OM_BUDGET) break;
+      await countdown(Math.ceil((omLog[0][0]+60000-now)/1000), s=>msg(`pacing to stay under Open-Meteo's free limit, next batch in ${s} s`));
+    }
+    omLog.push([Date.now(), n]);
     const r = await fetch(url);
-    if(r.status===429) throw new Error("Open-Meteo's free limit (600 points a minute) was reached. Wait a minute and reload");
-    if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status);
-    const j = await r.json(); (Array.isArray(j)?j:[j]).forEach(x=>out.push(x));
-    status(`Loading forecast ${Math.min(i+n,pts.length)} / ${pts.length} points`);
+    if(r.status===429 && attempt<OM_RETRIES){
+      await countdown(65, s=>msg(`Open-Meteo rate limit reached, retrying automatically in ${s} s (attempt ${attempt+1} of ${OM_RETRIES})`));
+      continue;
+    }
+    if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status+(r.status===429?' after '+OM_RETRIES+' tries':''));
+    return r.json();
   }
-  return out;
+}
+function fetchPoints(pts, tz, msg=status){
+  const run = async () => {
+    const out=[]; const n=50;
+    for(let i=0;i<pts.length;i+=n){
+      const ch=pts.slice(i,i+n);
+      const url=`https://api.open-meteo.com/v1/gfs?latitude=${ch.map(p=>p[0].toFixed(2)).join(',')}&longitude=${ch.map(p=>p[1].toFixed(2)).join(',')}&hourly=${VARS}&wind_speed_unit=kn&forecast_days=7&timezone=${encodeURIComponent(tz)}`;
+      const j = await omRequest(url, ch.length, m=>msg(`Loading forecast live, ${i} / ${pts.length} points: ${m}.`));
+      (Array.isArray(j)?j:[j]).forEach(x=>out.push(x));
+      msg(`Loading forecast live, ${Math.min(i+n,pts.length)} / ${pts.length} points`);
+    }
+    return out;
+  };
+  // one live fetch at a time, so the grid and the site list do not race each other into the limit
+  const p = omQueue.then(run); omQueue = p.catch(()=>{}); return p;
 }
 // scripts/fetch_forecasts.py writes cache/openmeteo/*.json. Hosted, cache/ sits beside index.html;
 // in local dev the page is served from /site/ and cache/ is one level up. Opened from disk, both fail
@@ -310,18 +341,22 @@ function srcText(src, fetched){
   const age=h<1?`${Math.round(h*60)} min`:`${Math.round(h)} h`;
   return h>STALE_H ? `<b class="stale">STALE: fetched ${when}, ${age} ago</b>` : `fetched ${when} (${age} ago)`;
 }
-async function loadGrid(reg){
-  if(gridCache[reg]) return gridCache[reg];
+function loadGrid(reg){
+  // keep the promise, so switching back to a region mid-load reuses the fetch already running
+  if(!gridCache[reg]) gridCache[reg] = fetchGrid(reg).catch(e => { delete gridCache[reg]; throw e; });
+  return gridCache[reg];
+}
+async function fetchGrid(reg){
   const c = await cached(`openmeteo/grid_${reg}.json`);
   if(c){
     // rebuild Open-Meteo-shaped responses so val() works on either source
     const res = c.pts.map((_,k)=>({hourly:Object.fromEntries([['time',c.time],...Object.entries(c.vars).map(([v,a])=>[v,a[k]])])}));
-    return gridCache[reg] = {R:c.R, pts:c.pts, res, src:'cache', fetched:c.fetched};
+    return {R:c.R, pts:c.pts, res, src:'cache', fetched:c.fetched};
   }
   const R=REGIONS[reg], pts=[];
   for(let la=R.la[0];la<=R.la[1]+1e-6;la+=R.s) for(let lo=R.lo[0];lo<=R.lo[1]+1e-6;lo+=R.s) pts.push([la,lo]);
   const res = await fetchPoints(pts,'America/New_York');
-  return gridCache[reg] = {R, pts, res, src:'live'};
+  return {R, pts, res, src:'live'};
 }
 function val(h, i, v){
   const g=k=>h[k][i];
@@ -370,13 +405,16 @@ function legend(v){
   const sc=SCALES[v];
   el.innerHTML=`<div class="ramp" style="background:linear-gradient(90deg,${sc.c.join(',')})"></div><div class="ramp-labels"><span>${sc.min}${sc.u}</span><span>${(sc.min+sc.max)/2}${sc.u}</span><span>${sc.max}${sc.u}</span></div>`;
 }
+let drawSeq = 0;
 async function drawField(){
   const v=document.getElementById('variable').value, reg=document.getElementById('region').value;
   const hour=+document.getElementById('hour').value, op=+document.getElementById('opacity').value;
   document.getElementById('hourLabel').textContent=`${String(hour).padStart(2,'0')}:00 ET`;
+  const seq = ++drawSeq;
   legend(v); fieldLayer.clearLayers();
   if(v==='none'){status('');return;}
-  let g; try{ g=await loadGrid(reg);}catch(e){status('Forecast unavailable: '+e.message+'.');return;}
+  let g; try{ g=await loadGrid(reg);}catch(e){ if(seq===drawSeq) status('Forecast unavailable: '+e.message+'.'); return; }
+  if(seq!==drawSeq) return;  // the user changed region, day or variable while this was loading
   const t = `${dayKey()}T${String(hour).padStart(2,'0')}:00`;
   const sc=SCALES[v], half=g.R.s/2;
   g.res.forEach((r,k)=>{
@@ -407,7 +445,8 @@ async function loadSites(){
     pairs = live.filter(o=>c.sites[o.id]).map(o=>[o,c.sites[o.id]]);
     siteSrc = {state:'ok', src:'cache', fetched:c.fetched};
   } else {
-    let res; try{ res = await fetchPoints(live.map(o=>[o.lat,o.lon]),'auto'); }
+    const msg = m => { document.getElementById('rank').innerHTML = `<li class="small" style="display:block">Site forecasts: ${esc(m)}</li>`; };
+    let res; try{ res = await fetchPoints(live.map(o=>[o.lat,o.lon]),'auto',msg); }
     catch(e){ siteSrc = {state:'error', msg:e.message}; renderRank(); return; }
     pairs = live.map((o,k)=>[o,res[k]]);
     siteSrc = {state:'ok', src:'live'};
