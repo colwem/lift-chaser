@@ -51,8 +51,17 @@ Done for GFS (0.25 deg) and HRRR (3 km): `scripts/fetch_models.py` fetches NOAA 
    1. Everything else, including boundary layer height: ERA5 reanalysis (about 5 days behind).
 1. Score forecast skill per model, lead time and region, so the page can say how far to trust a forecast at a given range.
 
-## Flights versus forecast
+## Glider flights: tracks, activity heat maps, and flying versus forecast
 
+Full plan with sources, terms and phases: `docs/glider-flights-plan.md`. In short: links out first; daily flight counts per airfield from OGN FlightBook (about 2021 on); tracks for a chosen day fetched on demand (WeGlide with Martin's own key, SkyLines, SoaringSpot); our own OGN logger for a track history going forward; then a model of flights per day from the forecast. Decisions needed from Martin: private or public site, a WeGlide API key, where the logger runs. Bulk access to WeGlide and OLC is on hold.
+
+1. Collect and keep every flight from WeGlide, OLC, SkyLines, SoaringSpot and OGN in our own datastore, each flight fetched exactly once, with duplicates across sources matched up. Private until the legal side is settled (Martin's decision, 2026-09-23).
+1. Separate weather from everything else that drives flying ("exposure"): more flights happen on weekends and 3-day weekends, in the summer holidays, on the days a club operates, and near places where glider pilots live. Build a baseline of expected flights per site and day without weather, and use it as a mask so that what is left over is the effect of the weather. Inputs to consider:
+   1. Calendar: day of week, US federal holidays and the 3-day weekends around them, school vacations, club operating days and seasons.
+   1. Where glider pilots live: the FAA releasable airmen database lists certificated pilots with their ratings (including glider) and home city, state and ZIP, so it gives the pilot population within a drive time of each site. SSA membership by region is a cross-check.
+   1. Travel time from those pilots to each site (the same drive-time work as in Trips).
+   1. The site's own history: its normal level of flying for that week of the year.
+   1. In the model: the baseline enters as an offset (the expected count without weather), so the weather terms explain only the departures from normal.
 1. Correlate predicted soaring quality with what glider pilots actually did: number of flights recorded in the area that day, and their average performance (distance, speed, contest points, maximum height).
 1. Use the result to calibrate the soaring index and the climatology ratings, so "good day" means "a day people actually flew well here".
 1. Show it on the map for past dates: predicted index next to actual flight count and performance.
@@ -60,7 +69,7 @@ Done for GFS (0.25 deg) and HRRR (3 km): `scripts/fetch_models.py` fetches NOAA 
 
 ## Climatology: planning weeks or months ahead
 
-1. Research access and terms of use for glider track archives: WeGlide (has a public API), OLC (OnLine Contest; largest, no official API), SkyLines (open source). Do this before building anything on them.
+1. Done 2026-09-23: research on glider track archives, see `docs/glider-flights-plan.md`.
 1. Check which variables ERA5 (ECMWF reanalysis, 1940 to present) provides through Open-Meteo's historical weather API, especially boundary layer height, CAPE and cloud.
 1. Date picker beyond the 7-day forecast.
 1. Absolute heat map: flights per grid cell within plus or minus 7 days of the chosen date, over all years.
@@ -68,6 +77,27 @@ Done for GFS (0.25 deg) and HRRR (3 km): `scripts/fetch_models.py` fetches NOAA 
 1. For each site and date window, the historical distribution of the established soaring indices (thermal index, W*, star rating and so on), shown as percentages per rating.
 1. Prototype that for 3 or 4 sites before building the global maps.
 1. Blend forecast and climatology between about 10 days and 2 weeks out.
+
+## Calendar scrubbing: watching weather develop over days, seasons and years
+
+Sliding through the hours of a day and watching the map change works well. Extend it to the calendar.
+
+1. Multi-day slider: one slider spanning several days of hours (for example the whole 7-day forecast), with a play button.
+1. Fixed-time day slider: pick a time of day (for example 13:00) and slide through the days, so each step shows the same hour on the next day.
+1. Year scale: the same fixed-time slider across a whole year, to see how conditions develop through the seasons. For past years this uses rebuilt past runs (see Forecast archive) or reanalysis.
+1. Choose what a past day shows: the forecast as issued (and how many days ahead), or what actually happened.
+1. Keep it fast: a year at one hour a day is 365 images per variable, so the year view likely needs smaller images (coarser grid or tiles), preloading, and precomputed daily files.
+
+## Point inspector: everything for one grid cell
+
+Click any grid cell (not only a gliderport) to open a panel at the bottom of the map with everything known for that spot, past and future.
+
+1. The current forecast values for that cell, every variable, hour by hour, from each model.
+1. Graph of the soaring index (and any other variable) by day of year, averaged over all years, with the spread (for example 25th to 75th percentile). The seasonal shape at that spot.
+1. Graph by absolute date: scroll back through the actual history, for example to July 2020, and see the forecast issued for that day (and what happened, once verification data is in).
+1. Overlays on the same graphs: glider flights at that cell per day (see Glider flights), and forecast versus observed.
+1. Data behind it: a per-cell daily time series built once from NOAA archives and extended each day. It is derived data that can be rebuilt, so it may be stored and pruned freely. HRRR reaches back to 2014 on AWS; GFS on AWS starts 2021, and older GFS runs are at NCAR RDA and NCEI if needed.
+1. Pick the grid for this: the full 3 km HRRR grid over 10 years is large, so start with a coarser grid (for example 0.25 deg) or daily values at 13:00 only.
 
 ## Display: everything on one page
 
@@ -81,6 +111,7 @@ Done for GFS (0.25 deg) and HRRR (3 km): `scripts/fetch_models.py` fetches NOAA 
    1. Fleet table (already there).
    1. Trip options for the selected date (see Trips).
 1. Pick the forecast source by lead time (HRRR, then GFS and ensembles, then climatology) and always label which source is shown.
+1. Help text for every forecast layer: a short "what it is, how it is computed, how to read it, what it misses" note next to the variable picker, with a longer version one click away. For example the soaring index: its thermal part (boundary layer depth from 1,500 ft = 0 to 6,500 ft = full), the cuts for low cloud, rain and CAPE, the ridge part, and that it is our own heuristic, not a published index. Same for W* (the formula and its inputs), cumulus base (the spread rule), lifted index, CAPE and so on. Also say which model each layer comes from and its resolution.
 1. Deep links to SkySight, XC Skies and Windy for the same place and time.
 1. Mobile layout pass; Martin often checks from his phone.
 1. Fleet table still needs sideways scrolling in narrow windows.
