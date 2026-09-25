@@ -35,6 +35,7 @@ No single source gives US-wide, multi-year, per-cell flight data that we may fre
 ### What that means per source, as of 2026-09-23
 
 1. **SkyLines** and **OGN FlightBook:** collecting (`python collector/collect.py --minutes N`).
+1. **OGN FlightBook tracks of the club ships** (added 2026-09-24): FlightBook also serves each flight as an IGC file for 24 hours (`/api/live/igc/<address>/<from>/<to>`). `collector/ogn_tracks.py` saves the flights of the GBSC ships with trackers (K1 and the ASW 19 today; watch list in `data/martin.json`) three times a day from a Windows scheduled task, and `.github/workflows/ogn-tracks.yml` does the same on GitHub into the private branch `ogn-tracks`. Details and the endpoint notes: `docs/ogn-tracks.md`. This is Martin's backup record of his own flights, and it is the first OGN track data we keep.
 1. **WeGlide:** answers only requests that look like a web browser (a truthful User-Agent gets HTTP 403), so it waits for an API key. Martin cannot create an account yet because WeGlide does not recognise his SSA number; once that is sorted, the key allows 60 requests a day, which lists about 6,000 flights a day (100 per request) plus some tracks.
 1. **OLC:** collecting (`collector/olc.py`). Each day's US flights by SSA region (region 1 = New England first) come from the list the daily page's own map requests; each flight's details come from its public flight page. The map's track files are deliberately scrambled by OLC, so we do not use them. The official IGC download needs a logged-in OLC user (about 10 files a day per user, from pilots who allow downloads): the collector logs in as Martin with `OLC_USER` and `OLC_PASSWORD`, which he sets himself with `setx`. Login works (2026-09-23), but OLC answers "You must first claim a valid flight to use this function": only users who have claimed a valid flight of their own may download others' IGC files. Tracks wait until Martin claims one; flight details are collected meanwhile.
 1. **SoaringSpot:** not started.
@@ -82,6 +83,7 @@ No single source gives US-wide, multi-year, per-cell flight data that we may fre
 
 ### Phase 5: our own OGN logger
 
+1. First step done 2026-09-24: `collector/ogn_aprs.py` logs in to `aprs.glidernet.org:14580` read-only, subscribes to the club ships by callsign (`b/` filter) or to a radius (`r/`), keeps the raw lines per UTC day and converts them to IGC. It only needs an always-on machine (Decision 3) and a wider filter to become the US-wide logger below.
 1. A small always-on program (Decision 3) connected to the OGN feed with a US-wide filter.
 1. It keeps glider positions only (aircraft type 1), drops "do not track" devices, and hides the identity of "do not identify" devices.
 1. It thins tracks to one point every 10 s, splits them into flights, and writes one compressed file per day. Rough estimate (unverified): a few MB per busy day for the US.

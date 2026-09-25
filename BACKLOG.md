@@ -56,6 +56,7 @@ Done for GFS (0.25 deg) and HRRR (3 km): `scripts/fetch_models.py` fetches NOAA 
 Full plan with sources, terms and phases: `docs/glider-flights-plan.md`. In short: links out first; daily flight counts per airfield from OGN FlightBook (about 2021 on); tracks for a chosen day fetched on demand (WeGlide with Martin's own key, SkyLines, SoaringSpot); our own OGN logger for a track history going forward; then a model of flights per day from the forecast. Decisions needed from Martin: private or public site, a WeGlide API key, where the logger runs. Bulk access to WeGlide and OLC is on hold.
 
 1. Collect and keep every flight from WeGlide, OLC, SkyLines, SoaringSpot and OGN in our own datastore, each flight fetched exactly once, with duplicates across sources matched up. Private until the legal side is settled (Martin's decision, 2026-09-23).
+1. Done 2026-09-24: the club ships' OGN tracks (K1 and the ASW 19) are saved as IGC files every day from FlightBook, on the laptop (scheduled task) and, once the R2 bucket is set up, by GitHub Actions into Cloudflare R2 (no data in the repo). See `docs/ogn-tracks.md`. Next: mark Martin's own flights in `data/martin.json`, and run `collector/ogn_aprs.py` on the homelab as the fallback logger.
 1. Separate weather from everything else that drives flying ("exposure"): more flights happen on weekends and 3-day weekends, in the summer holidays, on the days a club operates, and near places where glider pilots live. Build a baseline of expected flights per site and day without weather, and use it as a mask so that what is left over is the effect of the weather. Inputs to consider:
    1. Calendar: day of week, US federal holidays and the 3-day weekends around them, school vacations, club operating days and seasons.
    1. Where glider pilots live: the FAA releasable airmen database lists certificated pilots with their ratings (including glider) and home city, state and ZIP, so it gives the pilot population within a drive time of each site. SSA membership by region is a cross-check.
@@ -77,6 +78,10 @@ Full plan with sources, terms and phases: `docs/glider-flights-plan.md`. In shor
 1. For each site and date window, the historical distribution of the established soaring indices (thermal index, W*, star rating and so on), shown as percentages per rating.
 1. Prototype that for 3 or 4 sites before building the global maps.
 1. Blend forecast and climatology between about 10 days and 2 weeks out.
+1. Good soaring days per year, per gliderport: a map with a circle at each gliderport sized (and colored) by the average number of good soaring days a year, with a date-range filter (for example only January, or June to August) so it answers "where is it good in January". Also as a smooth heat map between gliderports.
+   1. Needs a definition of a good day that holds up: for example soaring index or W* above a threshold for at least a few hours between 11:00 and 17:00 local, or a ridge day; show the threshold and let it be changed.
+   1. Built from the same daily history as the point inspector (rebuilt NOAA runs or ERA5 reanalysis), averaged over as many years as available, with the number of years shown.
+   1. Later, calibrated against real flying (Glider flights section): days that produced good flights at that site.
 
 ## Calendar scrubbing: watching weather develop over days, seasons and years
 

@@ -21,7 +21,7 @@ The target is a hosted static website. A scheduled job fetches and caches foreca
 - He wants real files he can open outside Claude. Tables must fit the page width.
 - He likes tables; if one is unreadable, fix the formatting rather than dropping it.
 - For research, he wants many searches with varied phrasing and full-page reads, not a summary of the obvious top hits.
-- **He is very tall. He did not fit in an ASK-21.** Cockpit size is a first-class filter. Roomier types: Schweizer 2-33 and 2-32, LET L-23 Super Blanik and L-13, Grob G103 (depends on proportions), Grob G102, DG-505, PW-6 front seat, ASK-13.
+- **He is very tall.** Cockpit size is a first-class filter. He flies GBSC's ASK-21 K1 (an earlier note that he did not fit an ASK-21 was wrong; Martin, 2026-09-24). Roomier types: Schweizer 2-33 and 2-32, LET L-23 Super Blanik and L-13, Grob G103 (depends on proportions), Grob G102, DG-505, PW-6 front seat, ASK-13.
 - Home club: Greater Boston Soaring Club (GBSC), Sterling MA (3B3).
 - Scope decision: focus on **solo rental by a licensed visiting pilot**, meaning after he earns his Private Pilot Glider certificate. Instruction-only options are secondary.
 
@@ -39,6 +39,11 @@ The target is a hosted static website. A scheduled job fetches and caches foreca
 | `scripts/build_site.py` | Inlines data into template, writes `site/index.html` | Working |
 | `scripts/fetch_forecasts.py` | Fetches GBSC RASP (index, status, images, point forecasts) and Open-Meteo per site into `cache/` | **Untested against live servers** |
 | `.github/workflows/update-forecasts.yml` | Draft cron plus GitHub Pages deploy | Draft, never run |
+| `collector/ogn_tracks.py` | Saves the club ships' OGN (Open Glider Network) tracks from FlightBook as IGC files, one per flight, within OGN's 24 h window; watch list in `data/martin.json` | Working, tested live 2026-09-24; see `docs/ogn-tracks.md` |
+| `collector/ogn_aprs.py` | Fallback logger on the raw OGN APRS feed for the same ships; needs an always-on machine | Login and parsing tested 2026-09-24; not deployed |
+| `data/martin.json` | Martin's personal file: `ogn_watch` (tracker addresses, airfields) and a reserved `my_flights` list. Research jobs must never edit it | In use |
+| `scripts/install_ogn_task.ps1` | Registers the Windows task "chase-lift OGN tracks" (07:30, 13:00, 21:00, runs when the laptop wakes if missed) | Registered on Martin's laptop 2026-09-24 |
+| `.github/workflows/ogn-tracks.yml` | The same download twice a day on GitHub, uploaded to a Cloudflare R2 bucket (never to the repo) | Waits for the R2 bucket and the `OGN_R2_BUCKET` repo variable |
 | `legacy/` | Original Python data modules and the builders for the xlsx workbook and PDF report delivered to Martin, plus those two deliverables | Reference; the JSON in `data/` is now the source of truth |
 
 ### How the map works today
@@ -189,6 +194,7 @@ Planned personal fields, kept in a separate file `data/martin.json` so research 
 1. Drive-time isochrones from Newton for a Friday 17:30 departure (for example OpenRouteService or OSRM, Open Source Routing Machine) instead of circles.
 1. Flight tier refresh: re-check Friday-evening nonstops and fares quarterly.
 1. Mobile layout pass; Martin often checks from his phone.
+1. OGN tracks (done 2026-09-24, `docs/ogn-tracks.md`): set up the R2 bucket so the GitHub job starts; find the 2-33 and L-33 registrations; mark Martin's own flights in `data/martin.json`; run `collector/ogn_aprs.py` on the homelab as the fallback.
 
 ## Research caveats carried over
 

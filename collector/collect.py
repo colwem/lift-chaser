@@ -14,7 +14,7 @@ Planned: WeGlide (needs Martin's API key), OLC, SoaringSpot, our own OGN logger.
 import argparse, datetime as dt, json, pathlib, sys, threading, time, traceback
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import focus, store, skylines, ogn_flightbook, olc
+import focus, store, skylines, ogn_flightbook, ogn_tracks, olc
 from polite import Polite, Blocked
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -157,7 +157,15 @@ def run_olc(stop, lock):
             "check OLC_USER and OLC_PASSWORD (set with setx; see collector/olc.py)")
     log(f"olc done for this run: {n_list} day-regions listed, {n_det} flight pages read, {n_igc} IGC files")
 
-SOURCES = {"skylines": run_skylines, "ogn": run_ogn, "olc": run_olc}
+def run_ogn_tracks(stop, lock):
+    """The club ships' IGC tracks from FlightBook (collector/ogn_tracks.py), yesterday and today.
+    Quick, so it runs first in every collect run; the scheduled task runs it on its own as well."""
+    http = http_for("ogn", ogn_tracks.GAP_S, lock)
+    watch, airfields = ogn_tracks.watch_list()
+    new, lost, seen = ogn_tracks.run_once(ogn_tracks.Datastore(), http, watch, airfields, 2, log, stop)
+    log(f"ogn tracks done: {seen} watched flights in the logbooks, {new} new IGC files, {lost} lost")
+
+SOURCES = {"ogn_tracks": run_ogn_tracks, "skylines": run_skylines, "ogn": run_ogn, "olc": run_olc}
 
 def status():
     db = store.connect()
@@ -178,6 +186,10 @@ def status():
     for c, n, g, first, last in q("""SELECT airfield, count(*), sum(n_gliders), min(date), max(date)
                                      FROM ogn_days GROUP BY airfield ORDER BY sum(n_gliders) DESC"""):
         print(f"  ogn {c}: {n} days, {g} glider flights, {first} to {last}")
+    for reg, cn, n, lost, first, last in q("""SELECT registration, comp_id, count(track_path), count(track_error),
+                                              min(score_date), max(score_date) FROM flights WHERE source='ogn'
+                                              GROUP BY registration, comp_id ORDER BY registration"""):
+        print(f"  ogn tracks {reg} ({cn}): {n} IGC files, {lost} lost, {first} to {last}; plain copies in {store.DATA / 'igc'}")
     print(f"  requests made: {q('SELECT count(*) FROM requests')[0][0]}, blocked (401/403/429): "
           f"{q('SELECT count(*) FROM requests WHERE status IN (401,403,429)')[0][0]}")
     size = sum(p.stat().st_size for p in store.DATA.rglob('*') if p.is_file()) / 1e6

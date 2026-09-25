@@ -1,0 +1,56 @@
+# Save the club ships' OGN tracks (collector/ogn_tracks.py) twice a day to Cloudflare R2 (object
+# storage), never to GitHub: data does not belong in the repo (Martin, 2026-09-24).
+# FlightBook keeps a flight's positions for only 24 h, so this copy does not depend on Martin's laptop
+# being on; the laptop's scheduled task (scripts/install_ogn_task.ps1) keeps the other copy.
+#
+# Layout in the bucket: <year>/<date>_<HHMM>_<registration>_<cn>.igc plus index.jsonl (one line per
+# flight; the script reads it to skip flights it already has).
+#
+# Setup (Martin, once): create an R2 bucket in the Cloudflare dashboard; give the API token in the repo
+# secret CLOUDFLARE_API_TOKEN the permission Account > Workers R2 Storage > Edit; set the repo variable
+# OGN_R2_BUCKET to the bucket name (repo > Settings > Secrets and variables > Actions > Variables).
+# Until OGN_R2_BUCKET is set the job does nothing.
+# Note: GitHub disables scheduled workflows after 60 days without a push to the repo.
+name: ogn-tracks
+on:
+  schedule:
+    - cron: "0 1,12 * * *"   # 21:00 and 08:00 Boston time in summer; an hour earlier in winter
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency: { group: ogn-tracks, cancel-in-progress: false }
+env:
+  BUCKET: ${{ vars.OGN_R2_BUCKET }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Waiting for the R2 bucket to be set up
+        if: env.BUCKET == ''
+        run: echo "::notice::OGN_R2_BUCKET is not set, so nothing is saved yet (see the setup notes at the top of this file)."
+      - uses: actions/checkout@v4
+        if: env.BUCKET != ''
+      - uses: actions/setup-python@v5
+        if: env.BUCKET != ''
+        with: { python-version: "3.12" }
+      - name: Get the index of flights already saved
+        if: env.BUCKET != ''
+        run: |
+          mkdir -p tracks
+          npx -y wrangler@3 r2 object get "$BUCKET/index.jsonl" --file tracks/index.jsonl --remote \
+            || echo "no index yet: first run"
+          touch tracks/.started
+      - name: Download new tracks from OGN FlightBook
+        if: env.BUCKET != ''
+        run: python collector/ogn_tracks.py --out tracks --days 3
+      - name: Upload new tracks and the index to R2
+        if: env.BUCKET != ''
+        run: |
+          cd tracks
+          find . -type f -newer .started ! -name .started | sed 's|^\./||' | while read -r f; do
+            echo "upload $f"
+            npx -y wrangler@3 r2 object put "$BUCKET/$f" --file "$f" --remote
+          done

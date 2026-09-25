@@ -6,9 +6,9 @@
   "seats": 2,
   "rate": "$25/h members",
   "who": "Members",
-  "note": "Did not fit you",
+  "note": "OGN tracker, competition ID K1",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "GBSC",
@@ -17,42 +17,42 @@
   "seats": 2,
   "rate": "$25/h members",
   "who": "Members",
-  "note": "Did not fit you",
+  "note": "OGN tracker (K2), not heard since 2026-04-08",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "GBSC",
   "model": "Schweizer 2-33A",
-  "reg": "N1225S",
+  "reg": "",
   "seats": 2,
   "rate": "$14/h members",
   "who": "Members",
-  "note": "Roomy",
+  "note": "Roomy; N1225S was wrong (FAA: a Buckeye Dream Machine in KY), registration unknown",
   "type": "2-33",
   "last_verified": "2026-09-22"
  },
  {
   "op": "GBSC",
   "model": "LET L-23 Super Blanik",
-  "reg": "",
+  "reg": "N373BA",
   "seats": 2,
   "rate": "$14/h members",
   "who": "Members",
   "note": "Roomy; sit-test",
   "type": "L-23",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "GBSC",
   "model": "Schleicher ASW-19B",
-  "reg": "",
+  "reg": "N9814A",
   "seats": 1,
   "rate": "$20/h, 2 h limit",
   "who": "Members",
-  "note": "Tight above ~6'2\"",
+  "note": "Tight above ~6'2\"; OGN tracker, competition ID US",
   "type": "ASW-19",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "GBSC",
@@ -644,9 +644,9 @@
   "seats": 2,
   "rate": "$50/h guest",
   "who": "Guest",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "HHSC",
@@ -952,9 +952,9 @@
   "seats": 2,
   "rate": "",
   "who": "Members",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "BSA",
@@ -1029,9 +1029,9 @@
   "seats": 2,
   "rate": "",
   "who": "Members",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "MASA",
@@ -1040,9 +1040,9 @@
   "seats": 2,
   "rate": "",
   "who": "Members",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "MASA",
@@ -1084,9 +1084,9 @@
   "seats": 2,
   "rate": "$39/h",
   "who": "Visiting member",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "SKYLINE",
@@ -1150,9 +1150,9 @@
   "seats": 2,
   "rate": "",
   "who": "Guest member",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "BRSS",
@@ -1227,9 +1227,9 @@
   "seats": 2,
   "rate": "",
   "who": "Members",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "MGSA",
@@ -1315,9 +1315,9 @@
   "seats": 2,
   "rate": "",
   "who": "Members",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "EAGLEVILLE",
@@ -1326,9 +1326,9 @@
   "seats": 2,
   "rate": "",
   "who": "Members",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "EAGLEVILLE",
@@ -1392,9 +1392,9 @@
   "seats": 2,
   "rate": "$36-40/h",
   "who": "Members",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "CGC",
@@ -1425,9 +1425,9 @@
   "seats": 2,
   "rate": "",
   "who": "Members",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "CCSC",
@@ -1634,9 +1634,9 @@
   "seats": 2,
   "rate": "",
   "who": "Visiting member",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "TSA",
@@ -1700,9 +1700,9 @@
   "seats": 2,
   "rate": "$0.60/min",
   "who": "Guest member?",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "FLF",
@@ -1766,9 +1766,9 @@
   "seats": 2,
   "rate": "$16/flight + $16/h",
   "who": "Limited member",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "SSB",
@@ -1865,9 +1865,9 @@
   "seats": 2,
   "rate": "$110/h (ins. $100k)",
   "who": "Yes",
-  "note": "Does not fit you",
+  "note": "",
   "type": "ASK-21",
-  "last_verified": "2026-09-22"
+  "last_verified": "2026-09-24"
  },
  {
   "op": "AZS",

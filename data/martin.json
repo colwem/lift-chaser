@@ -1,0 +1,20 @@
+{
+  "_about": "Martin's personal data. Research jobs must never edit this file (see CLAUDE.md, Data schema).",
+  "ogn_watch": {
+    "_about": "Club ships whose OGN (Open Glider Network) tracks collector/ogn_tracks.py saves every day. Addresses are from the OGN device database (https://ddb.glidernet.org/download/), device_type F = FLARM, O = OGN tracker, I = ICAO address. 'last_seen' is the last day FlightBook logged a flight at Sterling (checked 2026-09-24). David (GBSC) said on 2026-09-24 that only K1 and the ASW 19 have working trackers; the others are listed so their flights are kept if a tracker comes back.",
+    "airfields": ["3B3"],
+    "devices": [
+      {"address": "A4FFEE", "device_type": "I", "registration": "N421GB", "cn": "K1", "model": "ASK-21", "op": "GBSC", "last_seen": "2026-09-19"},
+      {"address": "ADB1C0", "device_type": "I", "registration": "N9814A", "cn": "US", "model": "ASW-19", "op": "GBSC", "last_seen": "2026-08-15"},
+      {"address": "A9A8BD", "device_type": "O", "registration": "N721RC", "cn": "K2", "model": "ASK-21", "op": "GBSC", "last_seen": "2026-04-08"},
+      {"address": "A43F0A", "device_type": "I", "registration": "N373BA", "cn": "3BA", "model": "L-23 Super Blanik", "op": "GBSC", "last_seen": "2025-08-28"},
+      {"address": "A04201", "device_type": "I", "registration": "N1156S", "cn": "34", "model": "SGS 1-34", "op": "GBSC", "last_seen": "2025-07-26"},
+      {"address": "F4F0D2", "device_type": "F", "registration": "N1156S", "cn": "134", "model": "SGS 1-34", "op": "GBSC", "last_seen": null},
+      {"address": "A3B9D9", "device_type": "I", "registration": "N33917", "cn": "26", "model": "SGS 1-26E", "op": "GBSC", "last_seen": "2025-12-07"}
+    ]
+  },
+  "my_flights": {
+    "_about": "Planned: which of the saved tracks are Martin's own (date, file, notes). Not used by any script yet.",
+    "entries": []
+  }
+}
