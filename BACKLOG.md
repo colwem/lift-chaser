@@ -8,6 +8,10 @@ Ground rule: no asking outside people to do work for the project for now. Prefer
 
 ## Next up
 
+1. Move all data off GitHub into Cloudflare R2, once Martin has created the bucket (repo went public 2026-09-24; no data belongs in it):
+   1. Set the `OGN_R2_BUCKET` repo variable; run the `ogn-tracks` workflow once and check the upload.
+   1. Copy the run log (`runs.jsonl` on the `archive` branch) into the bucket, and switch the forecast workflow's "Append to the run log" step from the `archive` branch to R2.
+   1. Only after Martin has checked the copies: delete the `archive` branch. Optionally delete the old Actions runs from before the 2026-09-23 history rewrite (they link to commits that show his email).
 1. Watch the NOAA pipeline for a week; then drop the Open-Meteo fallback (fetch step, cache files, live browser fetch and its throttling code).
 1. Page support for past runs: a run or date picker that loads `cache/past/<cycle>/` built by `fetch_models.py --cycle`, plus a workflow input to build one on demand.
 1. Apply the recommended CLAUDE.md updates (current state table, known issues, development environment, hosting decision, backlog pointer to this file).
